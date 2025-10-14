@@ -1,0 +1,37 @@
+{
+  "_comment": "F5-TTS Pipeline Configuration",
+  "_instructions": "1. Copy this file to config.json, 2. Replace all YOUR_*_ID with actual Google Drive folder IDs",
+
+  "input_folder_id": "YOUR_INPUT_FOLDER_ID",
+  "scripts_folder_id": "YOUR_SCRIPTS_FOLDER_ID",
+  "reference_audio_folder_id": "YOUR_REFERENCE_AUDIO_FOLDER_ID",
+  "output_folder_id": "YOUR_OUTPUT_FOLDER_ID",
+
+  "_comment_whisper": "Whisper model size: tiny, base, small, medium, large",
+  "whisper_model": "base",
+
+  "_comment_chunk": "Text chunk size in characters (recommended: 500)",
+  "chunk_size": 500,
+
+  "_comment_download": "Auto-download inputs from Google Drive",
+  "auto_download": true,
+
+  "_comment_upload": "Auto-upload generated audio to Google Drive",
+  "auto_upload": true,
+
+  "_comment_reference": "Name of reference audio file in reference_audio folder",
+  "reference_audio_file": "reference.wav",
+
+  "_comment_scripts": "List of script files to process (leave empty to process all .txt files)",
+  "scripts": [
+    "script1.txt",
+    "script2.txt"
+  ],
+
+  "_example_workflow": {
+    "1": "Get folder IDs from Google Drive URLs",
+    "2": "Upload credentials.json and token.pickle to /workspace/f5tts_project/",
+    "3": "Edit this config with your folder IDs",
+    "4": "Run: python run_complete_pipeline.py --config config.json"
+  }
+}
