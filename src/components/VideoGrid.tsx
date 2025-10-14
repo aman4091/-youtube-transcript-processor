@@ -202,31 +202,31 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   }
 
   return (
-    <div className="max-w-[98%] mx-auto px-6 py-8">
+    <div className="w-full max-w-[98%] mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8 overflow-x-hidden">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">Channel Videos (27+ minutes)</h2>
-            <p className="text-gray-600 dark:text-gray-400">
+      <div className="mb-4 sm:mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
+          <div className="flex-1 min-w-0">
+            <h2 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2 truncate">Channel Videos (27+ minutes)</h2>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
               {settings.channelUrls.length} channel(s) • Showing {totalLoaded} videos
               {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-2 sm:gap-3 flex-wrap">
             <button
               onClick={() => updateSettings({ videoSortOrder: settings.videoSortOrder === 'popular' ? 'date' : 'popular' })}
-              className={`px-4 py-2 rounded-lg transition-colors font-medium ${
+              className={`px-3 sm:px-4 py-2 rounded-lg transition-colors font-medium text-xs sm:text-sm ${
                 settings.videoSortOrder === 'popular'
                   ? 'bg-purple-600 text-white hover:bg-purple-700'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
               }`}
             >
-              {settings.videoSortOrder === 'popular' ? '✓ Sorted by Popularity' : 'Sort by Date'}
+              {settings.videoSortOrder === 'popular' ? '✓ Popular' : 'Sort by Date'}
             </button>
             <button
               onClick={() => loadVideos()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm"
             >
               Refresh
             </button>
@@ -235,28 +235,28 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
         {/* Selection Actions */}
         {selectedVideos.size > 0 && (
-          <div className="flex items-center gap-3 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-500">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-500">
             <button
               onClick={handleProcessSelected}
-              className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium"
+              className="px-4 sm:px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-xs sm:text-sm"
             >
-              Process {selectedVideos.size} Selected Video{selectedVideos.size > 1 ? 's' : ''} Sequentially
+              Process {selectedVideos.size} Video{selectedVideos.size > 1 ? 's' : ''}
             </button>
             <button
               onClick={() => setSelectedVideos(new Set())}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+              className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs sm:text-sm"
             >
-              Clear Selection
+              Clear
             </button>
-            <span className="text-sm text-gray-600 dark:text-gray-300 ml-auto">
-              Videos will be processed one by one in order
+            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 sm:ml-auto break-words">
+              Videos will be processed one by one
             </span>
           </div>
         )}
       </div>
 
       {/* Video Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
         {displayVideos.map((video) => {
           const processed = isProcessed(video.videoId);
           const isSelected = selectedVideos.has(video.videoId);

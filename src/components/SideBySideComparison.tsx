@@ -127,10 +127,10 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
           {/* Content Display */}
           {!data.error && data.content && (
             <div
-              className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg p-6 overflow-y-auto border border-gray-200 dark:border-gray-700"
+              className="flex-1 bg-gray-50 dark:bg-gray-900 rounded-lg p-4 sm:p-6 overflow-y-auto overflow-x-hidden border border-gray-200 dark:border-gray-700"
               style={{ maxHeight: 'calc(100vh - 350px)' }}
             >
-              <pre className="whitespace-pre-wrap text-sm leading-relaxed">{data.content}</pre>
+              <pre className="whitespace-pre-wrap break-words text-sm leading-relaxed overflow-wrap-anywhere">{data.content}</pre>
             </div>
           )}
 
@@ -146,20 +146,20 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
   };
 
   return (
-    <div className="max-w-[98%] mx-auto px-4 pb-12">
+    <div className="w-full max-w-[98%] mx-auto px-2 sm:px-4 pb-12 overflow-x-hidden">
       {/* Pending Videos Banner */}
       {pendingCount !== undefined && pendingCount > 0 && isWaitingForUserAction && (
-        <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-700 rounded-lg p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-lg font-bold text-yellow-800 dark:text-yellow-200">
+        <div className="mb-6 bg-yellow-50 dark:bg-yellow-900/30 border-2 border-yellow-400 dark:border-yellow-700 rounded-lg p-3 sm:p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex-1">
+              <p className="text-base sm:text-lg font-bold text-yellow-800 dark:text-yellow-200">
                 ⏳ Waiting for your action
               </p>
-              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+              <p className="text-xs sm:text-sm text-yellow-700 dark:text-yellow-300 mt-1 break-words">
                 {pendingCount} video{pendingCount > 1 ? 's' : ''} remaining in queue. Click "Mark as Final" to process the next video.
               </p>
             </div>
-            <div className="px-4 py-2 bg-yellow-400 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 rounded-lg font-bold text-xl">
+            <div className="px-4 py-2 bg-yellow-400 dark:bg-yellow-600 text-yellow-900 dark:text-yellow-100 rounded-lg font-bold text-lg sm:text-xl self-start sm:self-auto">
               {pendingCount}
             </div>
           </div>
@@ -175,19 +175,19 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
                 onRewrite();
               }
             }}
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:from-orange-700 hover:to-red-700 transition-all font-bold text-lg shadow-lg"
+            className="w-full flex items-center justify-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:from-orange-700 hover:to-red-700 transition-all font-bold text-sm sm:text-lg shadow-lg"
           >
-            <RefreshCw className="w-6 h-6" />
-            Rewrite All Outputs (Same Transcript)
+            <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6" />
+            <span className="truncate">Rewrite All Outputs</span>
           </button>
         </div>
       )}
 
       {/* Quick Selection Bar */}
-      <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-4 border border-gray-200 dark:border-gray-700">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <span className="text-sm font-semibold text-gray-600 dark:text-gray-400">Quick Compare:</span>
+      <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+            <span className="text-xs sm:text-sm font-semibold text-gray-600 dark:text-gray-400">Quick Compare:</span>
             <div className="flex gap-2 flex-wrap">
               {/* Only show quick buttons for enabled models */}
               {models.find(m => m.id === 'deepseek') && (
@@ -243,7 +243,7 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
       </div>
 
       {/* Side by Side Comparison */}
-      <div className="flex gap-6">
+      <div className="flex flex-col lg:flex-row gap-6">
         {renderContent(leftData, 'left')}
         {renderContent(rightData, 'right')}
       </div>
