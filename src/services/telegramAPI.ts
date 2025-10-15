@@ -256,6 +256,9 @@ export async function verifyTelegramCredentials(
   console.log('🔍 Verifying Telegram credentials...');
   console.log('   Bot Token:', botToken.substring(0, 20) + '...');
   console.log('   Chat ID:', chatId);
+  console.log('   Chat ID type:', typeof chatId);
+  console.log('   Chat ID length:', chatId.length);
+  console.log('   First 5 chars:', chatId.substring(0, 5));
 
   // First verify bot token
   const botInfo = await getBotInfo(botToken);
@@ -268,6 +271,45 @@ export async function verifyTelegramCredentials(
   }
 
   console.log(`✓ Bot token valid: @${botInfo.botUsername}`);
+
+  // Try to get chat info to verify access
+  console.log('🔍 Checking chat access...');
+  try {
+    const getChatUrl = `${TELEGRAM_API_BASE}${botToken}/getChat`;
+    const chatInfoResponse = await axios.post(getChatUrl, { chat_id: chatId });
+
+    if (chatInfoResponse.data.ok) {
+      const chat = chatInfoResponse.data.result;
+      console.log('✓ Chat access verified!');
+      console.log('   Chat type:', chat.type);
+      console.log('   Chat title:', chat.title || chat.username || 'N/A');
+      console.log('   Chat ID (from API):', chat.id);
+    } else {
+      console.error('✗ Cannot access chat:', chatInfoResponse.data.description);
+      return {
+        success: false,
+        error: `Cannot access chat: ${chatInfoResponse.data.description}`
+      };
+    }
+  } catch (error) {
+    console.error('✗ Chat access error:', error);
+    if (axios.isAxiosError(error) && error.response?.data?.description) {
+      console.error('   Telegram says:', error.response.data.description);
+
+      // If chat not found, provide helpful error
+      if (error.response.data.description.includes('chat not found')) {
+        return {
+          success: false,
+          error: `❌ Chat not found! Bot may not be admin yet. Make sure:\n1. Bot is added as admin in channel\n2. "Post Messages" permission is enabled\n3. You've started personal chat with bot`
+        };
+      }
+
+      return {
+        success: false,
+        error: `❌ ${error.response.data.description}`
+      };
+    }
+  }
 
   // Check if this is a channel
   if (isChannel(chatId)) {
