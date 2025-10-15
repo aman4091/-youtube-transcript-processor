@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Youtube, Settings as SettingsIcon, History } from 'lucide-react';
+import { Youtube, Settings as SettingsIcon, History, Send } from 'lucide-react';
 import { isValidYouTubeUrl } from '../utils/linkValidator';
 import { useHistoryStore } from '../stores/historyStore';
 
@@ -8,10 +8,12 @@ interface InputSectionProps {
   onOpenSettings: () => void;
   onOpenHistory: () => void;
   onGoHome?: () => void;
+  onPushToChat?: () => void;
+  queueCount?: number;
   isProcessing: boolean;
 }
 
-export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onGoHome, isProcessing }: InputSectionProps) {
+export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -91,6 +93,20 @@ export default function InputSection({ onProcess, onOpenSettings, onOpenHistory,
               <SettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Settings</span>
             </button>
+
+            {/* Push to Chat Button */}
+            {onPushToChat && queueCount > 0 && (
+              <button
+                onClick={onPushToChat}
+                className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-green-600 text-white hover:bg-green-700 transition-colors font-medium text-sm sm:text-base relative ml-auto"
+              >
+                <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>Push to Chat</span>
+                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {queueCount}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </nav>

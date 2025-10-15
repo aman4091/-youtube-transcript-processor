@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, Loader2, Eye, Clock } from 'lucide-react';
+import { Play, CheckCircle, Loader2, Eye, Clock, Send } from 'lucide-react';
 import { fetchMultipleChannelsVideos, YouTubeVideo } from '../services/youtubeAPI';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
+import { useTempQueueStore } from '../stores/tempQueueStore';
 
 interface VideoGridProps {
   onVideoSelect: (videoUrl: string, videoTitle?: string, videoIndex?: number, totalVideos?: number, channelTitle?: string) => void;
   onBatchSelect?: (videos: Array<{ url: string; title: string }>) => void;
   onVideosLoaded?: (videos: YouTubeVideo[]) => void;
+  onPushToChat?: () => void;
 }
 
-export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded }: VideoGridProps) {
+export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded, onPushToChat }: VideoGridProps) {
   const { settings, updateSettings } = useSettingsStore();
   const { isLinkProcessed } = useHistoryStore();
+  const { getQueueCount } = useTempQueueStore();
 
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [loading, setLoading] = useState(false);
@@ -296,6 +299,20 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
             >
               Refresh
             </button>
+
+            {/* Push to Chat Button */}
+            {onPushToChat && getQueueCount() > 0 && (
+              <button
+                onClick={onPushToChat}
+                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-xs sm:text-sm relative"
+              >
+                <Send className="w-4 h-4" />
+                <span>Push to Chat</span>
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {getQueueCount()}
+                </span>
+              </button>
+            )}
           </div>
         </div>
 

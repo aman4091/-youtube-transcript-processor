@@ -919,6 +919,8 @@ function App() {
           setShowTitleGenerator(false);
           setProcessingState({ isProcessing: false, status: '' });
         }}
+        onPushToChat={handlePushToChat}
+        queueCount={getQueueCount()}
         isProcessing={processingState.isProcessing}
       />
 
@@ -978,6 +980,7 @@ function App() {
             setAvailableVideos(videos);
             console.log(`📦 Cached ${videos.length} videos for random selection`);
           }}
+          onPushToChat={handlePushToChat}
         />
       ) : null}
 
