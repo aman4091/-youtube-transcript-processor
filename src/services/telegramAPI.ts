@@ -70,8 +70,9 @@ export async function sendToTelegram(
   chatId: string,
   content: string,
   modelName: string,
-  videoTitle?: string,
-  _videoUrl?: string
+  _videoTitle?: string,
+  _videoUrl?: string,
+  counter?: number
 ): Promise<TelegramSendResult> {
   if (!botToken || !chatId) {
     return {
@@ -86,12 +87,12 @@ export async function sendToTelegram(
   try {
     const url = `${TELEGRAM_API_BASE}${botToken}/sendDocument`;
 
-    // Create a filename based on video title or timestamp
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const sanitizedTitle = videoTitle
-      ? videoTitle.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50).trim()
-      : 'script';
-    const filename = `${sanitizedTitle}_${timestamp}.txt`;
+    // Create a simple filename based on counter
+    // If model name contains "Title", it's a title file
+    const isTitle = modelName.includes('Title');
+    const filename = counter
+      ? (isTitle ? `${counter}_title.txt` : `${counter}.txt`)
+      : `script_${Date.now()}.txt`;
 
     // Create a Blob from the content (pure script only)
     const blob = new Blob([content], { type: 'text/plain' });

@@ -11,6 +11,7 @@ import TitleConfirmModal from './components/TitleConfirmModal';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
+import { useScriptCounterStore } from './stores/scriptCounterStore';
 import { fetchYouTubeTranscript } from './services/supaDataAPI';
 import { fetchMultipleChannelsVideos, YouTubeVideo } from './services/youtubeAPI';
 import {
@@ -73,12 +74,12 @@ function App() {
   const [showTitleGenerator, setShowTitleGenerator] = useState(false);
   const [showTitleConfirm, setShowTitleConfirm] = useState(false);
   const [currentScript, setCurrentScript] = useState('');
-  const [currentModelName, setCurrentModelName] = useState('');
   const [currentCounter, setCurrentCounter] = useState(0);
 
   const { settings } = useSettingsStore();
   const { addProcessedLink, saveOutput } = useHistoryStore();
   const { addToQueue, getQueue, clearQueue, getQueueCount, updateGeneratedTitle } = useTempQueueStore();
+  const { getNextCounter } = useScriptCounterStore();
 
   const handleProcess = async (
     url: string,
@@ -653,11 +654,11 @@ function App() {
       saveOutput(currentUrl, output);
       console.log('✓ Saved to localStorage history');
 
-      // Download script FIRST
-      const sanitizedModel = modelName.replace(/[^a-zA-Z0-9]/g, '_');
-      const counter = Date.now();
-      const filename = `${sanitizedModel}_${counter}.txt`;
+      // Get next sequential counter
+      const counter = getNextCounter();
+      const filename = `${counter}.txt`;
 
+      // Download script FIRST
       const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -679,9 +680,8 @@ function App() {
       );
       console.log(`📝 Added to Telegram queue (${getQueueCount()} items total)`);
 
-      // Store current script, model name, and counter for later use
+      // Store current script and counter for later use
       setCurrentScript(output);
-      setCurrentModelName(modelName);
       setCurrentCounter(counter);
 
       // THEN show title modal
@@ -733,19 +733,18 @@ function App() {
     console.log(`📝 Title saved to queue for counter: ${currentCounter}`);
 
     // Download title with same counter
-    const sanitizedModel = currentModelName.replace(/[^a-zA-Z0-9]/g, '_');
     await new Promise(resolve => setTimeout(resolve, 100));
 
     const titleBlob = new Blob([title], { type: 'text/plain;charset=utf-8' });
     const titleUrl = URL.createObjectURL(titleBlob);
     const titleLink = document.createElement('a');
     titleLink.href = titleUrl;
-    titleLink.download = `${sanitizedModel}_title_${currentCounter}.txt`;
+    titleLink.download = `${currentCounter}_title.txt`;
     document.body.appendChild(titleLink);
     titleLink.click();
     document.body.removeChild(titleLink);
     URL.revokeObjectURL(titleUrl);
-    console.log(`✓ Title downloaded: ${sanitizedModel}_title_${currentCounter}.txt`);
+    console.log(`✓ Title downloaded: ${currentCounter}_title.txt`);
 
     alert('Output and title downloaded!');
     await processNextVideo();
@@ -808,7 +807,8 @@ function App() {
           script.content,
           script.modelName,
           script.videoTitle,
-          script.videoUrl
+          script.videoUrl,
+          script.counter
         );
 
         if (result1.success) {
@@ -830,7 +830,8 @@ function App() {
             script.content,
             script.modelName,
             script.videoTitle,
-            script.videoUrl
+            script.videoUrl,
+            script.counter
           );
 
           if (result2Script.success) {
@@ -851,7 +852,8 @@ function App() {
             script.generatedTitle,
             `${script.modelName} - Title`,
             script.videoTitle,
-            script.videoUrl
+            script.videoUrl,
+            script.counter
           );
 
           if (result2Title.success) {
