@@ -812,11 +812,7 @@ function App() {
 
         if (result.success) {
           successCount++;
-          if (result.messageCount && result.messageCount > 1) {
-            console.log(`✓ Sent as ${result.messageCount} messages`);
-          } else {
-            console.log('✓ Sent successfully');
-          }
+          console.log('✓ Sent successfully as file');
         } else {
           failCount++;
           errors.push(`${script.modelName}: ${result.error}`);

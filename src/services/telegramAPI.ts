@@ -1,90 +1,10 @@
 import axios from 'axios';
 
 const TELEGRAM_API_BASE = 'https://api.telegram.org/bot';
-const MAX_MESSAGE_LENGTH = 4096; // Telegram's message limit
 
 export interface TelegramSendResult {
   success: boolean;
   error?: string;
-  messageCount?: number;
-}
-
-/**
- * Split long message into chunks that fit Telegram's 4096 character limit
- */
-function splitMessage(message: string, maxLength: number = MAX_MESSAGE_LENGTH): string[] {
-  if (message.length <= maxLength) {
-    return [message];
-  }
-
-  const chunks: string[] = [];
-  let remaining = message;
-
-  while (remaining.length > 0) {
-    if (remaining.length <= maxLength) {
-      chunks.push(remaining);
-      break;
-    }
-
-    // Find the last newline within the limit
-    let splitPoint = remaining.lastIndexOf('\n', maxLength);
-
-    // If no newline found, find last space
-    if (splitPoint === -1 || splitPoint === 0) {
-      splitPoint = remaining.lastIndexOf(' ', maxLength);
-    }
-
-    // If still no good split point, just cut at max length
-    if (splitPoint === -1 || splitPoint === 0) {
-      splitPoint = maxLength;
-    }
-
-    chunks.push(remaining.substring(0, splitPoint));
-    remaining = remaining.substring(splitPoint).trim();
-  }
-
-  return chunks;
-}
-
-/**
- * Escape Markdown special characters for Telegram
- */
-function escapeMarkdown(text: string): string {
-  // Escape special Markdown characters
-  return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
-}
-
-/**
- * Format script for Telegram message
- */
-function formatTelegramMessage(
-  content: string,
-  modelName: string,
-  videoTitle?: string,
-  videoUrl?: string,
-  partNumber?: number,
-  totalParts?: number
-): string {
-  const timestamp = new Date().toLocaleString();
-  let header = `📄 *Model:* ${escapeMarkdown(modelName)}\n🕐 *Time:* ${escapeMarkdown(timestamp)}\n`;
-
-  if (videoTitle) {
-    header += `🎬 *Video:* ${escapeMarkdown(videoTitle)}\n`;
-  }
-
-  if (videoUrl) {
-    header += `🔗 *URL:* ${escapeMarkdown(videoUrl)}\n`;
-  }
-
-  if (partNumber && totalParts && totalParts > 1) {
-    header += `📦 *Part:* ${partNumber}/${totalParts}\n`;
-  }
-
-  header += `\n─────────────────────\n\n`;
-
-  const footer = `\n\n─────────────────────\n✨ Sent via YouTube Processor`;
-
-  return header + content + footer;
 }
 
 /**
@@ -143,7 +63,7 @@ async function sendSingleMessage(
 }
 
 /**
- * Send a script to Telegram (handles splitting if needed)
+ * Send a script to Telegram as a text file (no formatting, no parts)
  */
 export async function sendToTelegram(
   botToken: string,
@@ -151,7 +71,7 @@ export async function sendToTelegram(
   content: string,
   modelName: string,
   videoTitle?: string,
-  videoUrl?: string
+  _videoUrl?: string
 ): Promise<TelegramSendResult> {
   if (!botToken || !chatId) {
     return {
@@ -161,55 +81,66 @@ export async function sendToTelegram(
   }
 
   console.log(`📤 Sending to Telegram: ${modelName}`);
+  console.log(`   Content length: ${content.length} chars`);
 
-  // Format the complete message first
-  const fullMessage = formatTelegramMessage(content, modelName, videoTitle, videoUrl);
+  try {
+    const url = `${TELEGRAM_API_BASE}${botToken}/sendDocument`;
 
-  // Check if we need to split
-  if (fullMessage.length <= MAX_MESSAGE_LENGTH) {
-    // Send as single message
-    const result = await sendSingleMessage(botToken, chatId, fullMessage);
-    if (result.success) {
-      console.log('✓ Message sent to Telegram');
-    }
-    return result;
-  }
+    // Create a filename based on video title or timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const sanitizedTitle = videoTitle
+      ? videoTitle.replace(/[^a-zA-Z0-9\s]/g, '').substring(0, 50).trim()
+      : 'script';
+    const filename = `${sanitizedTitle}_${timestamp}.txt`;
 
-  // Need to split into multiple messages
-  console.log(`⚠️ Message too long (${fullMessage.length} chars), splitting...`);
+    // Create a Blob from the content (pure script only)
+    const blob = new Blob([content], { type: 'text/plain' });
 
-  // Split only the content part
-  const contentChunks = splitMessage(content, MAX_MESSAGE_LENGTH - 300); // Reserve space for header/footer
-  console.log(`📦 Split into ${contentChunks.length} parts`);
+    // Create FormData to send the file
+    const formData = new FormData();
+    formData.append('chat_id', chatId);
+    formData.append('document', blob, filename);
 
-  // Send each chunk
-  for (let i = 0; i < contentChunks.length; i++) {
-    const partMessage = formatTelegramMessage(
-      contentChunks[i],
-      modelName,
-      videoTitle,
-      videoUrl,
-      i + 1,
-      contentChunks.length
-    );
+    console.log(`📄 Sending as file: ${filename}`);
 
-    const result = await sendSingleMessage(botToken, chatId, partMessage);
+    const response = await axios.post(url, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
 
-    if (!result.success) {
+    if (response.data.ok) {
+      console.log('✓ File sent to Telegram successfully');
+      return { success: true };
+    } else {
+      console.error('✗ Telegram API response not OK:', response.data);
       return {
         success: false,
-        error: `Failed to send part ${i + 1}/${contentChunks.length}: ${result.error}`,
+        error: response.data.description || 'Unknown error from Telegram',
       };
     }
+  } catch (error) {
+    console.error('✗ Telegram API error:', error);
 
-    // Add small delay between messages to avoid rate limiting
-    if (i < contentChunks.length - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+    if (axios.isAxiosError(error)) {
+      console.error('   Status:', error.response?.status);
+      console.error('   Response data:', error.response?.data);
+
+      if (error.response?.status === 401) {
+        return { success: false, error: 'Invalid bot token. Please check your settings.' };
+      } else if (error.response?.status === 400) {
+        const telegramError = error.response?.data?.description || 'Invalid chat ID or message format.';
+        return { success: false, error: `Telegram Error: ${telegramError}` };
+      } else if (error.response?.data?.description) {
+        return { success: false, error: error.response.data.description };
+      }
     }
-  }
 
-  console.log(`✓ All ${contentChunks.length} parts sent successfully`);
-  return { success: true, messageCount: contentChunks.length };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send file to Telegram',
+    };
+  }
 }
 
 /**
