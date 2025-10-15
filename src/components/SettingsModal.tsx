@@ -405,7 +405,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
             <div>
               <label className="block text-sm font-medium mb-2">
-                Telegram Chat ID
+                Chat ID #1 (Script Only)
               </label>
               <input
                 type="text"
@@ -416,20 +416,39 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
                 placeholder="-1002498890377"
               />
-              <div className="mt-1 space-y-1">
-                <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Get your chat ID from @userinfobot on Telegram
-                </p>
-                <div className="flex items-start gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded">
-                  <span className="text-yellow-600 dark:text-yellow-400 text-sm font-bold">⚠️</span>
-                  <div className="text-xs text-yellow-800 dark:text-yellow-200">
-                    <strong>Channel IDs MUST start with minus sign (-)</strong>
-                    <br />
-                    <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">✓ Correct: -1002498890377</code>
-                    <br />
-                    <code className="bg-red-100 dark:bg-red-900 px-1 rounded">✗ Wrong: 1002498890377</code> (missing -)
-                  </div>
-                </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                This chat will receive only the script file
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Chat ID #2 (Script + Title) - Optional
+              </label>
+              <input
+                type="text"
+                value={localSettings.telegramChatIdWithTitle}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, telegramChatIdWithTitle: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                placeholder="-1002498890377"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                This chat will receive both script and title files
+              </p>
+            </div>
+
+            <div className="flex items-start gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-300 dark:border-yellow-700 rounded">
+              <span className="text-yellow-600 dark:text-yellow-400 text-sm font-bold">⚠️</span>
+              <div className="text-xs text-yellow-800 dark:text-yellow-200">
+                <strong>Channel IDs MUST start with minus sign (-)</strong>
+                <br />
+                <code className="bg-yellow-100 dark:bg-yellow-900 px-1 rounded">✓ Correct: -1002498890377</code>
+                <br />
+                <code className="bg-red-100 dark:bg-red-900 px-1 rounded">✗ Wrong: 1002498890377</code> (missing -)
+                <br />
+                <span className="text-xs mt-1">Get your chat ID from @userinfobot on Telegram</span>
               </div>
             </div>
 

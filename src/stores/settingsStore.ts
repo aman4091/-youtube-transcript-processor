@@ -13,7 +13,8 @@ export interface Settings {
   selectedOpenRouterModel: string;
   // Telegram settings
   telegramBotToken: string;
-  telegramChatId: string;
+  telegramChatId: string; // For script only
+  telegramChatIdWithTitle: string; // For script + title
   // Model enable/disable toggles
   enableDeepSeek: boolean;
   enableGeminiFlash: boolean;
@@ -42,6 +43,7 @@ const defaultSettings: Settings = {
   // Telegram defaults
   telegramBotToken: '',
   telegramChatId: '',
+  telegramChatIdWithTitle: '',
   // Model toggles - all enabled by default
   enableDeepSeek: true,
   enableGeminiFlash: true,
@@ -70,7 +72,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'youtube-processor-settings',
-      version: 6,
+      version: 7,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating settings from version ${version}`);
         // Migrate old channelUrl (string) to channelUrls (array)
@@ -110,6 +112,10 @@ export const useSettingsStore = create<SettingsStore>()(
           // Add Telegram settings
           persistedState.settings.telegramBotToken = persistedState.settings.telegramBotToken || '';
           persistedState.settings.telegramChatId = persistedState.settings.telegramChatId || '';
+        }
+        // Migrate to version 7 - add second Telegram chat ID
+        if (version < 7) {
+          persistedState.settings.telegramChatIdWithTitle = persistedState.settings.telegramChatIdWithTitle || '';
         }
         console.log('✓ Settings migrated successfully');
         return persistedState;

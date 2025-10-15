@@ -78,7 +78,7 @@ function App() {
 
   const { settings } = useSettingsStore();
   const { addProcessedLink, saveOutput } = useHistoryStore();
-  const { addToQueue, getQueue, clearQueue, getQueueCount } = useTempQueueStore();
+  const { addToQueue, getQueue, clearQueue, getQueueCount, updateGeneratedTitle } = useTempQueueStore();
 
   const handleProcess = async (
     url: string,
@@ -728,6 +728,10 @@ function App() {
     console.log(`✓ Title selected: ${title}`);
     setShowTitleGenerator(false);
 
+    // Save title to queue
+    updateGeneratedTitle(currentCounter, title);
+    console.log(`📝 Title saved to queue for counter: ${currentCounter}`);
+
     // Download title with same counter
     const sanitizedModel = currentModelName.replace(/[^a-zA-Z0-9]/g, '_');
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -759,7 +763,7 @@ function App() {
 
     // Check Telegram credentials
     if (!settings.telegramBotToken || !settings.telegramChatId) {
-      alert('⚠️ Telegram not configured!\n\nPlease add your Bot Token and Chat ID in Settings.');
+      alert('⚠️ Telegram not configured!\n\nPlease add your Bot Token and Chat ID #1 in Settings.');
       return;
     }
 
@@ -773,12 +777,7 @@ function App() {
 
     console.log(`📦 Found ${queue.length} scripts in queue`);
 
-    // Confirm before sending
-    const confirmMessage = `Send ${queue.length} script${queue.length > 1 ? 's' : ''} to Telegram?`;
-    if (!confirm(confirmMessage)) {
-      console.log('❌ User canceled push');
-      return;
-    }
+    // NO CONFIRMATION - just send directly
 
     // Show processing status
     setProcessingState({
@@ -801,7 +800,9 @@ function App() {
       });
 
       try {
-        const result = await sendToTelegram(
+        // Send to Chat ID #1 (script only)
+        console.log(`📤 Sending to Chat #1 (script only)...`);
+        const result1 = await sendToTelegram(
           settings.telegramBotToken,
           settings.telegramChatId,
           script.content,
@@ -810,16 +811,66 @@ function App() {
           script.videoUrl
         );
 
-        if (result.success) {
-          successCount++;
-          console.log('✓ Sent successfully as file');
+        if (result1.success) {
+          console.log('✓ Sent to Chat #1 successfully');
         } else {
           failCount++;
-          errors.push(`${script.modelName}: ${result.error}`);
-          console.error(`✗ Failed: ${result.error}`);
+          errors.push(`Chat #1 - ${script.modelName}: ${result1.error}`);
+          console.error(`✗ Failed Chat #1: ${result1.error}`);
         }
 
-        // Add delay between messages to avoid rate limiting
+        // Send to Chat ID #2 (script + title) if configured and title exists
+        if (settings.telegramChatIdWithTitle && script.generatedTitle) {
+          console.log(`📤 Sending to Chat #2 (script + title)...`);
+
+          // Send script first
+          const result2Script = await sendToTelegram(
+            settings.telegramBotToken,
+            settings.telegramChatIdWithTitle,
+            script.content,
+            script.modelName,
+            script.videoTitle,
+            script.videoUrl
+          );
+
+          if (result2Script.success) {
+            console.log('✓ Script sent to Chat #2');
+          } else {
+            failCount++;
+            errors.push(`Chat #2 Script - ${script.modelName}: ${result2Script.error}`);
+            console.error(`✗ Failed Chat #2 Script: ${result2Script.error}`);
+          }
+
+          // Small delay between script and title
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // Send title
+          const result2Title = await sendToTelegram(
+            settings.telegramBotToken,
+            settings.telegramChatIdWithTitle,
+            script.generatedTitle,
+            `${script.modelName} - Title`,
+            script.videoTitle,
+            script.videoUrl
+          );
+
+          if (result2Title.success) {
+            console.log('✓ Title sent to Chat #2');
+            successCount++;
+          } else {
+            failCount++;
+            errors.push(`Chat #2 Title - ${script.modelName}: ${result2Title.error}`);
+            console.error(`✗ Failed Chat #2 Title: ${result2Title.error}`);
+          }
+        } else if (settings.telegramChatIdWithTitle) {
+          console.log(`⚠️ Chat #2 configured but no title for ${script.modelName}, skipping`);
+        }
+
+        if (result1.success) {
+          successCount++;
+        }
+
+        // Add delay between scripts to avoid rate limiting
         if (i < queue.length - 1) {
           await new Promise((resolve) => setTimeout(resolve, 1500));
         }
@@ -835,19 +886,19 @@ function App() {
     setProcessingState({ isProcessing: false, status: '' });
 
     // Show results
-    if (successCount === queue.length) {
-      console.log(`\n✅ All ${successCount} scripts sent successfully!`);
-      alert(`✅ Success!\n\n${successCount} script${successCount > 1 ? 's' : ''} sent to Telegram!`);
+    if (failCount === 0) {
+      console.log(`\n✅ All scripts sent successfully!`);
+      alert(`✅ Success!\n\n${queue.length} script${queue.length > 1 ? 's' : ''} sent to Telegram!`);
       // Clear queue on success
       clearQueue();
       console.log('🗑️ Queue cleared');
     } else if (successCount > 0) {
-      console.log(`\n⚠️ Partial success: ${successCount}/${queue.length} sent`);
+      console.log(`\n⚠️ Partial success: ${successCount} succeeded, ${failCount} failed`);
       const errorSummary = errors.join('\n');
-      alert(`⚠️ Partial Success\n\nSent: ${successCount}\nFailed: ${failCount}\n\nErrors:\n${errorSummary}`);
+      alert(`⚠️ Partial Success\n\nSucceeded: ${successCount}\nFailed: ${failCount}\n\nErrors:\n${errorSummary}`);
       // Don't clear queue if some failed
     } else {
-      console.log(`\n✗ All ${failCount} scripts failed`);
+      console.log(`\n✗ All scripts failed`);
       const errorSummary = errors.join('\n');
       alert(`❌ Failed to send scripts\n\n${errorSummary}`);
       // Don't clear queue if all failed
