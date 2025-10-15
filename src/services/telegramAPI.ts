@@ -47,6 +47,14 @@ function splitMessage(message: string, maxLength: number = MAX_MESSAGE_LENGTH): 
 }
 
 /**
+ * Escape Markdown special characters for Telegram
+ */
+function escapeMarkdown(text: string): string {
+  // Escape special Markdown characters
+  return text.replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+}
+
+/**
  * Format script for Telegram message
  */
 function formatTelegramMessage(
@@ -58,14 +66,14 @@ function formatTelegramMessage(
   totalParts?: number
 ): string {
   const timestamp = new Date().toLocaleString();
-  let header = `📄 *Model:* ${modelName}\n🕐 *Time:* ${timestamp}\n`;
+  let header = `📄 *Model:* ${escapeMarkdown(modelName)}\n🕐 *Time:* ${escapeMarkdown(timestamp)}\n`;
 
   if (videoTitle) {
-    header += `🎬 *Video:* ${videoTitle}\n`;
+    header += `🎬 *Video:* ${escapeMarkdown(videoTitle)}\n`;
   }
 
   if (videoUrl) {
-    header += `🔗 *URL:* ${videoUrl}\n`;
+    header += `🔗 *URL:* ${escapeMarkdown(videoUrl)}\n`;
   }
 
   if (partNumber && totalParts && totalParts > 1) {
@@ -90,6 +98,10 @@ async function sendSingleMessage(
   try {
     const url = `${TELEGRAM_API_BASE}${botToken}/sendMessage`;
 
+    console.log(`📤 Sending to Telegram API...`);
+    console.log(`   Chat ID: ${chatId}`);
+    console.log(`   Message length: ${message.length} chars`);
+
     const response = await axios.post(url, {
       chat_id: chatId,
       text: message,
@@ -97,19 +109,27 @@ async function sendSingleMessage(
     });
 
     if (response.data.ok) {
+      console.log('✓ Telegram API response: OK');
       return { success: true };
     } else {
+      console.error('✗ Telegram API response not OK:', response.data);
       return {
         success: false,
         error: response.data.description || 'Unknown error from Telegram',
       };
     }
   } catch (error) {
+    console.error('✗ Telegram API error:', error);
+
     if (axios.isAxiosError(error)) {
+      console.error('   Status:', error.response?.status);
+      console.error('   Response data:', error.response?.data);
+
       if (error.response?.status === 401) {
         return { success: false, error: 'Invalid bot token. Please check your settings.' };
       } else if (error.response?.status === 400) {
-        return { success: false, error: 'Invalid chat ID or message format.' };
+        const telegramError = error.response?.data?.description || 'Invalid chat ID or message format.';
+        return { success: false, error: `Telegram Error: ${telegramError}` };
       } else if (error.response?.data?.description) {
         return { success: false, error: error.response.data.description };
       }

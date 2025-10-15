@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon } from 'lucide-react';
+import { X, Settings as SettingsIcon, Send } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { fetchOpenRouterModels } from '../services/aiProcessors';
+import { verifyTelegramCredentials } from '../services/telegramAPI';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -14,6 +15,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; name: string }>>([]);
   const [modelSearch, setModelSearch] = useState('');
   const [channelUrlsText, setChannelUrlsText] = useState('');
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -35,6 +38,40 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
     updateSettings({ ...localSettings, channelUrls: urls });
     onClose();
+  };
+
+  const handleTestTelegram = async () => {
+    if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+      setTestResult({
+        success: false,
+        message: 'Please enter both Bot Token and Chat ID'
+      });
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const result = await verifyTelegramCredentials(
+        localSettings.telegramBotToken,
+        localSettings.telegramChatId
+      );
+
+      setTestResult({
+        success: result.success,
+        message: result.success
+          ? '✅ Success! Check your Telegram for the test message.'
+          : `❌ Failed: ${result.error}`
+      });
+    } catch (error) {
+      setTestResult({
+        success: false,
+        message: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+      });
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const filteredModels = openRouterModels.filter(
@@ -382,6 +419,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Get your chat ID from @userinfobot on Telegram
               </p>
+            </div>
+
+            {/* Test Button */}
+            <button
+              onClick={handleTestTelegram}
+              disabled={isTesting || !localSettings.telegramBotToken || !localSettings.telegramChatId}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                isTesting || !localSettings.telegramBotToken || !localSettings.telegramChatId
+                  ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+              }`}
+            >
+              <Send className="w-4 h-4" />
+              {isTesting ? 'Testing...' : 'Test Connection'}
+            </button>
+
+            {/* Test Result */}
+            {testResult && (
+              <div className={`p-3 rounded-md border ${
+                testResult.success
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-800 dark:text-green-200'
+                  : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700 text-red-800 dark:text-red-200'
+              }`}>
+                <p className="text-sm font-medium">{testResult.message}</p>
+              </div>
+            )}
+
+            {/* Help Box */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
+              <p className="text-sm text-blue-800 dark:text-blue-200 font-semibold mb-2">
+                📱 How to get Chat ID:
+              </p>
+              <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
+                <li>Open Telegram and search for @userinfobot</li>
+                <li>Send /start to the bot</li>
+                <li>Copy your chat ID (it will be a number)</li>
+                <li>For channels: Use @getidsbot or check channel URL</li>
+              </ol>
             </div>
           </div>
         </div>
