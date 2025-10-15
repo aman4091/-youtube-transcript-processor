@@ -5,6 +5,9 @@ import ProcessingStatus from './components/ProcessingStatus';
 import SideBySideComparison from './components/SideBySideComparison';
 import VideoGrid from './components/VideoGrid';
 import TranscriptApproval from './components/TranscriptApproval';
+import ProcessedVideos from './components/ProcessedVideos';
+import TitleGenerator from './components/TitleGenerator';
+import TitleConfirmModal from './components/TitleConfirmModal';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { fetchYouTubeTranscript } from './services/supaDataAPI';
@@ -16,7 +19,7 @@ import {
   processWithOpenRouter,
 } from './services/aiProcessors';
 import { chunkText } from './utils/chunkingService';
-import { uploadToGoogleDrive } from './services/googleDriveAPI';
+import { cleanMarkdown } from './utils/markdownCleaner';
 
 interface ProcessingState {
   isProcessing: boolean;
@@ -42,6 +45,7 @@ interface Results {
 
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
     status: '',
@@ -62,6 +66,13 @@ function App() {
     totalVideos?: number;
   } | null>(null);
   const [availableVideos, setAvailableVideos] = useState<YouTubeVideo[]>([]);
+
+  // Title generation states
+  const [showTitleGenerator, setShowTitleGenerator] = useState(false);
+  const [showTitleConfirm, setShowTitleConfirm] = useState(false);
+  const [currentScript, setCurrentScript] = useState('');
+  const [currentModelName, setCurrentModelName] = useState('');
+  const [currentCounter, setCurrentCounter] = useState(0);
 
   const { settings } = useSettingsStore();
   const { addProcessedLink, saveOutput } = useHistoryStore();
@@ -152,8 +163,11 @@ function App() {
     });
 
     try {
-      // Add to history
-      addProcessedLink(url);
+      // Add to history with metadata
+      const videoIdMatch = url.match(/(?:v=|\/)([\w-]{11})/);
+      const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
+      const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined;
+      addProcessedLink(url, videoId, videoTitle, thumbnailUrl, currentVideoInfo?.channelTitle);
 
       // Chunk the transcript
       console.log('✂️ Splitting transcript into chunks...');
@@ -278,16 +292,16 @@ function App() {
         if (result.status === 'fulfilled') {
           const chunkResults = result.value;
 
-          if (chunkResults.deepSeek.content) allDeepSeek.push(chunkResults.deepSeek.content);
+          if (chunkResults.deepSeek.content) allDeepSeek.push(cleanMarkdown(chunkResults.deepSeek.content));
           if (chunkResults.deepSeek.error && !deepSeekErr) deepSeekErr = chunkResults.deepSeek.error;
 
-          if (chunkResults.geminiFlash.content) allGeminiFlash.push(chunkResults.geminiFlash.content);
+          if (chunkResults.geminiFlash.content) allGeminiFlash.push(cleanMarkdown(chunkResults.geminiFlash.content));
           if (chunkResults.geminiFlash.error && !geminiFlashErr) geminiFlashErr = chunkResults.geminiFlash.error;
 
-          if (chunkResults.geminiPro.content) allGeminiPro.push(chunkResults.geminiPro.content);
+          if (chunkResults.geminiPro.content) allGeminiPro.push(cleanMarkdown(chunkResults.geminiPro.content));
           if (chunkResults.geminiPro.error && !geminiProErr) geminiProErr = chunkResults.geminiPro.error;
 
-          if (chunkResults.openRouter.content) allOpenRouter.push(chunkResults.openRouter.content);
+          if (chunkResults.openRouter.content) allOpenRouter.push(cleanMarkdown(chunkResults.openRouter.content));
           if (chunkResults.openRouter.error && !openRouterErr) openRouterErr = chunkResults.openRouter.error;
         } else {
           console.error(`✗ Chunk ${index + 1} failed:`, result.reason);
@@ -299,10 +313,10 @@ function App() {
       // Combine all chunk results
       const finalResults: Results = {
         transcript,
-        deepSeek: allDeepSeek.join('\n\n---\n\n'),
-        geminiFlash: allGeminiFlash.join('\n\n---\n\n'),
-        geminiPro: allGeminiPro.join('\n\n---\n\n'),
-        openRouter: allOpenRouter.join('\n\n---\n\n'),
+        deepSeek: allDeepSeek.join('\n\n'),
+        geminiFlash: allGeminiFlash.join('\n\n'),
+        geminiPro: allGeminiPro.join('\n\n'),
+        openRouter: allOpenRouter.join('\n\n'),
         deepSeekError: deepSeekErr,
         geminiFlashError: geminiFlashErr,
         geminiProError: geminiProErr,
@@ -582,16 +596,16 @@ function App() {
         if (result.status === 'fulfilled') {
           const chunkResults = result.value;
 
-          if (chunkResults.deepSeek.content) allDeepSeek.push(chunkResults.deepSeek.content);
+          if (chunkResults.deepSeek.content) allDeepSeek.push(cleanMarkdown(chunkResults.deepSeek.content));
           if (chunkResults.deepSeek.error && !deepSeekErr) deepSeekErr = chunkResults.deepSeek.error;
 
-          if (chunkResults.geminiFlash.content) allGeminiFlash.push(chunkResults.geminiFlash.content);
+          if (chunkResults.geminiFlash.content) allGeminiFlash.push(cleanMarkdown(chunkResults.geminiFlash.content));
           if (chunkResults.geminiFlash.error && !geminiFlashErr) geminiFlashErr = chunkResults.geminiFlash.error;
 
-          if (chunkResults.geminiPro.content) allGeminiPro.push(chunkResults.geminiPro.content);
+          if (chunkResults.geminiPro.content) allGeminiPro.push(cleanMarkdown(chunkResults.geminiPro.content));
           if (chunkResults.geminiPro.error && !geminiProErr) geminiProErr = chunkResults.geminiPro.error;
 
-          if (chunkResults.openRouter.content) allOpenRouter.push(chunkResults.openRouter.content);
+          if (chunkResults.openRouter.content) allOpenRouter.push(cleanMarkdown(chunkResults.openRouter.content));
           if (chunkResults.openRouter.error && !openRouterErr) openRouterErr = chunkResults.openRouter.error;
         } else {
           console.error(`✗ Chunk ${index + 1} failed:`, result.reason);
@@ -603,10 +617,10 @@ function App() {
       // Combine all chunk results
       const finalResults: Results = {
         transcript,
-        deepSeek: allDeepSeek.join('\n\n---\n\n'),
-        geminiFlash: allGeminiFlash.join('\n\n---\n\n'),
-        geminiPro: allGeminiPro.join('\n\n---\n\n'),
-        openRouter: allOpenRouter.join('\n\n---\n\n'),
+        deepSeek: allDeepSeek.join('\n\n'),
+        geminiFlash: allGeminiFlash.join('\n\n'),
+        geminiPro: allGeminiPro.join('\n\n'),
+        openRouter: allOpenRouter.join('\n\n'),
         deepSeekError: deepSeekErr,
         geminiFlashError: geminiFlashErr,
         geminiProError: geminiProErr,
@@ -636,77 +650,112 @@ function App() {
       saveOutput(currentUrl, output);
       console.log('✓ Saved to localStorage history');
 
-      // Create filename from model name and timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      // Download script FIRST
       const sanitizedModel = modelName.replace(/[^a-zA-Z0-9]/g, '_');
-      const filename = `${sanitizedModel}_output_${timestamp}.txt`;
+      const counter = Date.now();
+      const filename = `${sanitizedModel}_${counter}.txt`;
 
-      // Download as text file
       const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.download = filename;
-
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
+      console.log(`✓ Script downloaded: ${filename}`);
 
-      // Upload to Google Drive if enabled
-      if (settings.enableDriveUpload && settings.googleDriveAccessToken) {
-        console.log('☁️ Uploading to Google Drive...');
-        try {
-          const driveResult = await uploadToGoogleDrive(
-            output,
-            filename,
-            settings.googleDriveAccessToken,
-            settings.googleDriveFolderId || undefined
-          );
+      // Store current script, model name, and counter for later use
+      setCurrentScript(output);
+      setCurrentModelName(modelName);
+      setCurrentCounter(counter);
 
-          if (driveResult.error) {
-            console.error('✗ Drive upload failed:', driveResult.error);
-            alert(`Local save successful, but Drive upload failed: ${driveResult.error}`);
-          } else {
-            console.log('✓ Successfully uploaded to Google Drive');
-            alert(`${modelName} output saved locally and uploaded to Google Drive!`);
-          }
-        } catch (error) {
-          console.error('✗ Drive upload error:', error);
-          alert(`${modelName} output saved locally, but Drive upload failed.`);
-        }
-      } else {
-        console.log('✓ File downloaded locally');
-        alert(`${modelName} output saved and downloaded!`);
-      }
-
-      // If there are pending videos, process the next one
-      if (pendingVideos.length > 0) {
-        console.log('\n▶️ Moving to next video...');
-        setIsWaitingForUserAction(false);
-        const nextVideo = pendingVideos[0];
-        const remainingVideos = pendingVideos.slice(1);
-
-        // Calculate correct index (we just finished 1 video, and there are pendingVideos.length remaining)
-        const totalVideosOriginal = 1 + pendingVideos.length; // 1 completed + remaining
-        const currentIndex = totalVideosOriginal - pendingVideos.length + 1; // Next video index
-
-        setPendingVideos(remainingVideos);
-        console.log(`📋 Remaining videos in queue: ${remainingVideos.length}`);
-
-        // Process next video
-        await handleProcess(nextVideo.url, nextVideo.title, currentIndex, totalVideosOriginal);
-      } else {
-        console.log('\n🎉 All videos processed successfully!');
-      }
+      // THEN show title modal
+      setShowTitleConfirm(true);
     }
   };
+
+  const handleTitleConfirm = () => {
+    console.log('✨ User wants to generate titles');
+    setShowTitleConfirm(false);
+    setShowTitleGenerator(true);
+  };
+
+  const handleTitleSkipFromConfirm = async () => {
+    console.log('⏭️ User skipped title generation from confirm');
+    setShowTitleConfirm(false);
+    // Script already downloaded, just process next video
+    await processNextVideo();
+  };
+
+  const processNextVideo = async () => {
+    // If there are pending videos, process the next one
+    if (pendingVideos.length > 0) {
+      console.log('\n▶️ Moving to next video...');
+      setIsWaitingForUserAction(false);
+      const nextVideo = pendingVideos[0];
+      const remainingVideos = pendingVideos.slice(1);
+
+      // Calculate correct index (we just finished 1 video, and there are pendingVideos.length remaining)
+      const totalVideosOriginal = 1 + pendingVideos.length; // 1 completed + remaining
+      const currentIndex = totalVideosOriginal - pendingVideos.length + 1; // Next video index
+
+      setPendingVideos(remainingVideos);
+      console.log(`📋 Remaining videos in queue: ${remainingVideos.length}`);
+
+      // Process next video
+      await handleProcess(nextVideo.url, nextVideo.title, currentIndex, totalVideosOriginal);
+    } else {
+      console.log('\n🎉 All videos processed successfully!');
+    }
+  };
+
+  const handleTitleSelected = async (title: string) => {
+    console.log(`✓ Title selected: ${title}`);
+    setShowTitleGenerator(false);
+
+    // Download title with same counter
+    const sanitizedModel = currentModelName.replace(/[^a-zA-Z0-9]/g, '_');
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    const titleBlob = new Blob([title], { type: 'text/plain;charset=utf-8' });
+    const titleUrl = URL.createObjectURL(titleBlob);
+    const titleLink = document.createElement('a');
+    titleLink.href = titleUrl;
+    titleLink.download = `${sanitizedModel}_title_${currentCounter}.txt`;
+    document.body.appendChild(titleLink);
+    titleLink.click();
+    document.body.removeChild(titleLink);
+    URL.revokeObjectURL(titleUrl);
+    console.log(`✓ Title downloaded: ${sanitizedModel}_title_${currentCounter}.txt`);
+
+    alert('Output and title downloaded!');
+    await processNextVideo();
+  };
+
+  const handleSkipTitle = async () => {
+    console.log('⏭️ Title generation skipped');
+    setShowTitleGenerator(false);
+    await processNextVideo();
+  };
+
+  // If history view is open, show only history page
+  if (isHistoryOpen) {
+    return (
+      <ProcessedVideos
+        onVideoSelect={handleProcess}
+        onClose={() => setIsHistoryOpen(false)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <InputSection
         onProcess={handleProcess}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenHistory={() => setIsHistoryOpen(true)}
         isProcessing={processingState.isProcessing}
       />
 
@@ -768,6 +817,23 @@ function App() {
       ) : null}
 
       <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+
+      {/* Title Confirmation Modal */}
+      {showTitleConfirm && (
+        <TitleConfirmModal
+          onConfirm={handleTitleConfirm}
+          onSkip={handleTitleSkipFromConfirm}
+        />
+      )}
+
+      {/* Title Generator Modal */}
+      {showTitleGenerator && (
+        <TitleGenerator
+          script={currentScript}
+          onTitleSelected={handleTitleSelected}
+          onSkip={handleSkipTitle}
+        />
+      )}
     </div>
   );
 }

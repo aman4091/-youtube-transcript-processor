@@ -15,7 +15,8 @@ export interface YouTubeVideo {
 interface YouTubeAPIResponse {
   items: Array<{
     id: {
-      videoId: string;
+      videoId?: string;
+      channelId?: string;
     };
     snippet: {
       title: string;
@@ -93,7 +94,11 @@ async function resolveChannelId(usernameOrHandle: string, apiKey: string): Promi
     );
 
     if (response.data.items && response.data.items.length > 0) {
-      return response.data.items[0].id.videoId;
+      const channelId = response.data.items[0].id.channelId;
+      if (!channelId) {
+        throw new Error('Channel ID not found in response');
+      }
+      return channelId;
     }
 
     throw new Error('Channel not found');
@@ -237,6 +242,7 @@ export async function fetchMultipleChannelsVideos(
 
 /**
  * Fetch videos from a YouTube channel
+ * Automatically makes multiple API calls to reach desired maxResults (since YouTube API has 50/request limit)
  */
 export async function fetchChannelVideos(
   channelUrl: string,
@@ -269,71 +275,88 @@ export async function fetchChannelVideos(
     // Get uploads playlist ID
     const uploadsPlaylistId = await getUploadsPlaylistId(channelId, apiKey);
 
-    // Fetch videos from uploads playlist
-    const playlistResponse = await axios.get(
-      'https://www.googleapis.com/youtube/v3/playlistItems',
-      {
-        params: {
-          key: apiKey,
-          playlistId: uploadsPlaylistId,
-          part: 'snippet',
-          maxResults: maxResults,
-          pageToken: pageToken,
-        },
+    // Make multiple API calls to reach maxResults (since YouTube API limit is 50 per request)
+    const allVideos: YouTubeVideo[] = [];
+    let currentPageToken = pageToken;
+    let totalResults = 0;
+    const requestsNeeded = Math.ceil(maxResults / 50); // e.g., 200/50 = 4 requests
+
+    for (let i = 0; i < requestsNeeded; i++) {
+      // Fetch videos from uploads playlist (max 50 per request)
+      const playlistResponse = await axios.get(
+        'https://www.googleapis.com/youtube/v3/playlistItems',
+        {
+          params: {
+            key: apiKey,
+            playlistId: uploadsPlaylistId,
+            part: 'snippet',
+            maxResults: 50, // YouTube API max limit
+            pageToken: currentPageToken,
+          },
+        }
+      );
+
+      // Get video IDs for details
+      const videoIds = playlistResponse.data.items
+        .map((item: any) => item.snippet.resourceId.videoId)
+        .join(',');
+
+      // Fetch video details (duration, views)
+      const detailsResponse = await axios.get(
+        'https://www.googleapis.com/youtube/v3/videos',
+        {
+          params: {
+            key: apiKey,
+            id: videoIds,
+            part: 'contentDetails,statistics',
+          },
+        }
+      );
+
+      // Combine data
+      const videos: YouTubeVideo[] = playlistResponse.data.items
+        .map((item: any) => {
+          const videoId = item.snippet.resourceId.videoId;
+          const details = detailsResponse.data.items.find(
+            (d: any) => d.id === videoId
+          );
+
+          if (!details) return null;
+
+          const durationSeconds = parseDuration(details.contentDetails.duration);
+          const viewCount = details.statistics.viewCount;
+
+          return {
+            videoId: videoId,
+            title: item.snippet.title,
+            thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
+            publishedAt: item.snippet.publishedAt,
+            channelTitle: item.snippet.channelTitle,
+            description: item.snippet.description,
+            duration: formatDuration(durationSeconds),
+            durationSeconds,
+            viewCount: parseInt(viewCount, 10).toLocaleString(),
+          };
+        })
+        .filter((video: YouTubeVideo | null): video is YouTubeVideo => {
+          // Filter: only videos >= minDurationMinutes
+          return video !== null && video.durationSeconds >= minDurationMinutes * 60;
+        });
+
+      allVideos.push(...videos);
+      totalResults = playlistResponse.data.pageInfo.totalResults;
+      currentPageToken = playlistResponse.data.nextPageToken;
+
+      // Stop if no more pages or we've reached desired count
+      if (!currentPageToken || allVideos.length >= maxResults) {
+        break;
       }
-    );
-
-    // Get video IDs for details
-    const videoIds = playlistResponse.data.items
-      .map((item: any) => item.snippet.resourceId.videoId)
-      .join(',');
-
-    // Fetch video details (duration, views)
-    const detailsResponse = await axios.get(
-      'https://www.googleapis.com/youtube/v3/videos',
-      {
-        params: {
-          key: apiKey,
-          id: videoIds,
-          part: 'contentDetails,statistics',
-        },
-      }
-    );
-
-    // Combine data
-    const videos: YouTubeVideo[] = playlistResponse.data.items
-      .map((item: any) => {
-        const videoId = item.snippet.resourceId.videoId;
-        const details = detailsResponse.data.items.find(
-          (d: any) => d.id === videoId
-        );
-
-        if (!details) return null;
-
-        const durationSeconds = parseDuration(details.contentDetails.duration);
-        const viewCount = details.statistics.viewCount;
-
-        return {
-          videoId: videoId,
-          title: item.snippet.title,
-          thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
-          publishedAt: item.snippet.publishedAt,
-          channelTitle: item.snippet.channelTitle,
-          description: item.snippet.description,
-          duration: formatDuration(durationSeconds),
-          durationSeconds,
-          viewCount: parseInt(viewCount, 10).toLocaleString(),
-        };
-      })
-      .filter((video: YouTubeVideo | null): video is YouTubeVideo => {
-        // Filter: only videos >= minDurationMinutes
-        return video !== null && video.durationSeconds >= minDurationMinutes * 60;
-      });
+    }
 
     return {
-      videos,
-      nextPageToken: playlistResponse.data.nextPageToken,
-      totalResults: playlistResponse.data.pageInfo.totalResults,
+      videos: allVideos,
+      nextPageToken: currentPageToken,
+      totalResults: totalResults,
     };
   } catch (error) {
     if (axios.isAxiosError(error)) {

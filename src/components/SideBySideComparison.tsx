@@ -166,23 +166,6 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
         </div>
       )}
 
-      {/* Rewrite Button */}
-      {onRewrite && (
-        <div className="mb-6">
-          <button
-            onClick={() => {
-              if (confirm('Regenerate all outputs with the same transcript? This will re-process with all enabled AI models.')) {
-                onRewrite();
-              }
-            }}
-            className="w-full flex items-center justify-center gap-2 sm:gap-3 px-4 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-orange-600 to-red-600 text-white rounded-lg hover:from-orange-700 hover:to-red-700 transition-all font-bold text-sm sm:text-lg shadow-lg"
-          >
-            <RefreshCw className="w-5 h-5 sm:w-6 sm:h-6" />
-            <span className="truncate">Rewrite All Outputs</span>
-          </button>
-        </div>
-      )}
-
       {/* Quick Selection Bar */}
       <div className="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-3 sm:p-4 border border-gray-200 dark:border-gray-700">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
@@ -232,13 +215,28 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
               )}
             </div>
           </div>
-          <button
-            onClick={swapModels}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
-          >
-            <ArrowLeftRight className="w-4 h-4" />
-            Swap Sides
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            {onRewrite && (
+              <button
+                onClick={() => {
+                  if (confirm('Regenerate all outputs with the same transcript? This will re-process with all enabled AI models.')) {
+                    onRewrite();
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Rewrite
+              </button>
+            )}
+            <button
+              onClick={swapModels}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+            >
+              <ArrowLeftRight className="w-4 h-4" />
+              Swap Sides
+            </button>
+          </div>
         </div>
       </div>
 

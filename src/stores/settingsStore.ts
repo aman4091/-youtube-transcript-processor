@@ -9,11 +9,11 @@ export interface Settings {
   youtubeApiKey: string;
   channelUrls: string[]; // Changed from single string to array
   customPrompt: string;
+  titlePrompt: string;
   selectedOpenRouterModel: string;
-  // Google Drive settings
-  googleDriveAccessToken: string;
-  googleDriveFolderId: string;
-  enableDriveUpload: boolean;
+  // Telegram settings
+  telegramBotToken: string;
+  telegramChatId: string;
   // Model enable/disable toggles
   enableDeepSeek: boolean;
   enableGeminiFlash: boolean;
@@ -37,11 +37,11 @@ const defaultSettings: Settings = {
   youtubeApiKey: '',
   channelUrls: [], // Changed to array
   customPrompt: '',
+  titlePrompt: 'Generate 10 catchy, viral YouTube video titles for the following script. Make them engaging and click-worthy.',
   selectedOpenRouterModel: 'meta-llama/llama-3.1-8b-instruct:free',
-  // Google Drive defaults
-  googleDriveAccessToken: '',
-  googleDriveFolderId: '',
-  enableDriveUpload: false,
+  // Telegram defaults
+  telegramBotToken: '',
+  telegramChatId: '',
   // Model toggles - all enabled by default
   enableDeepSeek: true,
   enableGeminiFlash: true,
@@ -70,7 +70,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'youtube-processor-settings',
-      version: 4,
+      version: 6,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating settings from version ${version}`);
         // Migrate old channelUrl (string) to channelUrls (array)
@@ -79,11 +79,12 @@ export const useSettingsStore = create<SettingsStore>()(
           delete persistedState.settings.channelUrl;
           persistedState.settings.channelUrls = oldUrl ? [oldUrl] : [];
         }
-        // Migrate to version 2 - add Google Drive settings if missing
+        // Migrate to version 2 - remove Google Drive settings
         if (version < 2) {
-          persistedState.settings.googleDriveAccessToken = persistedState.settings.googleDriveAccessToken || '';
-          persistedState.settings.googleDriveFolderId = persistedState.settings.googleDriveFolderId || '';
-          persistedState.settings.enableDriveUpload = persistedState.settings.enableDriveUpload || false;
+          // Remove old Google Drive settings
+          delete persistedState.settings.googleDriveAccessToken;
+          delete persistedState.settings.googleDriveFolderId;
+          delete persistedState.settings.enableDriveUpload;
         }
         // Migrate to version 3 - add model toggles if missing
         if (version < 3) {
@@ -95,6 +96,20 @@ export const useSettingsStore = create<SettingsStore>()(
         // Migrate to version 4 - add video sort order
         if (version < 4) {
           persistedState.settings.videoSortOrder = persistedState.settings.videoSortOrder || 'popular';
+        }
+        // Migrate to version 5 - add title prompt
+        if (version < 5) {
+          persistedState.settings.titlePrompt = persistedState.settings.titlePrompt || 'Generate 10 catchy, viral YouTube video titles for the following script. Make them engaging and click-worthy.';
+        }
+        // Migrate to version 6 - add Telegram settings, remove Google Drive
+        if (version < 6) {
+          // Remove Google Drive settings
+          delete persistedState.settings.googleDriveAccessToken;
+          delete persistedState.settings.googleDriveFolderId;
+          delete persistedState.settings.enableDriveUpload;
+          // Add Telegram settings
+          persistedState.settings.telegramBotToken = persistedState.settings.telegramBotToken || '';
+          persistedState.settings.telegramChatId = persistedState.settings.telegramChatId || '';
         }
         console.log('✓ Settings migrated successfully');
         return persistedState;

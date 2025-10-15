@@ -5,11 +5,15 @@ export interface ProcessedLink {
   url: string;
   processedAt: string;
   savedOutput?: string;
+  videoId?: string;
+  title?: string;
+  thumbnail?: string;
+  channelTitle?: string;
 }
 
 interface HistoryStore {
   processedLinks: ProcessedLink[];
-  addProcessedLink: (url: string) => void;
+  addProcessedLink: (url: string, videoId?: string, title?: string, thumbnail?: string, channelTitle?: string) => void;
   isLinkProcessed: (url: string) => boolean;
   saveOutput: (url: string, output: string) => void;
   clearHistory: () => void;
@@ -19,13 +23,13 @@ export const useHistoryStore = create<HistoryStore>()(
   persist(
     (set, get) => ({
       processedLinks: [],
-      addProcessedLink: (url) => {
+      addProcessedLink: (url, videoId, title, thumbnail, channelTitle) => {
         const exists = get().processedLinks.find((link) => link.url === url);
         if (!exists) {
           set((state) => ({
             processedLinks: [
+              { url, processedAt: new Date().toISOString(), videoId, title, thumbnail, channelTitle },
               ...state.processedLinks,
-              { url, processedAt: new Date().toISOString() },
             ],
           }));
         }

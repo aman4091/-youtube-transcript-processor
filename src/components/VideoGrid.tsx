@@ -22,6 +22,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   const [hasMoreVideos, setHasMoreVideos] = useState(false);
   const [totalLoaded, setTotalLoaded] = useState(0);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [selectedChannel, setSelectedChannel] = useState<string>('all');
 
   const loadVideos = async (append: boolean = false) => {
     if (!settings.youtubeApiKey || settings.channelUrls.length === 0) {
@@ -42,7 +43,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
         settings.channelUrls,
         settings.youtubeApiKey,
         append ? pageTokens : new Map(),
-        50,
+        200, // Load 200 videos per page
         27 // Minimum 27 minutes
         // Note: Sorting is done client-side in displayVideos
       );
@@ -143,18 +144,23 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     await onVideoSelect(firstVideoUrl, firstVideo.title, 1, videosToProcess.length, firstVideo.channelTitle);
   };
 
-  // Sort videos client-side based on current sort order
-  const displayVideos = [...videos].sort((a, b) => {
-    if (settings.videoSortOrder === 'popular') {
-      // Sort by view count (highest first)
-      const viewsA = parseInt(a.viewCount.replace(/,/g, ''), 10);
-      const viewsB = parseInt(b.viewCount.replace(/,/g, ''), 10);
-      return viewsB - viewsA;
-    } else {
-      // Sort by date (newest first)
-      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
-    }
-  });
+  // Get unique channel names
+  const uniqueChannels = Array.from(new Set(videos.map(v => v.channelTitle))).sort();
+
+  // Filter and sort videos
+  const displayVideos = videos
+    .filter(video => selectedChannel === 'all' || video.channelTitle === selectedChannel)
+    .sort((a, b) => {
+      if (settings.videoSortOrder === 'popular') {
+        // Sort by view count (highest first)
+        const viewsA = parseInt(a.viewCount.replace(/,/g, ''), 10);
+        const viewsB = parseInt(b.viewCount.replace(/,/g, ''), 10);
+        return viewsB - viewsA;
+      } else {
+        // Sort by date (newest first)
+        return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+      }
+    });
 
   if (!settings.youtubeApiKey || settings.channelUrls.length === 0) {
     return (
@@ -209,11 +215,28 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
           <div className="flex-1 min-w-0">
             <h2 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2 truncate">Channel Videos (27+ minutes)</h2>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
-              {settings.channelUrls.length} channel(s) • Showing {totalLoaded} videos
+              {settings.channelUrls.length} channel(s) • Showing {displayVideos.length} of {totalLoaded} videos
               {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
             </p>
           </div>
           <div className="flex gap-2 sm:gap-3 flex-wrap">
+            {/* Channel Filter Dropdown */}
+            <select
+              value={selectedChannel}
+              onChange={(e) => setSelectedChannel(e.target.value)}
+              className="px-3 sm:px-4 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:border-blue-500 dark:hover:border-blue-400 transition-colors font-medium text-xs sm:text-sm cursor-pointer"
+            >
+              <option value="all">All Channels ({totalLoaded})</option>
+              {uniqueChannels.map((channel) => {
+                const count = videos.filter(v => v.channelTitle === channel).length;
+                return (
+                  <option key={channel} value={channel}>
+                    {channel} ({count})
+                  </option>
+                );
+              })}
+            </select>
+
             <button
               onClick={() => updateSettings({ videoSortOrder: settings.videoSortOrder === 'popular' ? 'date' : 'popular' })}
               className={`px-3 sm:px-4 py-2 rounded-lg transition-colors font-medium text-xs sm:text-sm ${
@@ -254,6 +277,29 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
           </div>
         )}
       </div>
+
+      {/* Load More Button - Top */}
+      {videos.length > 0 && hasMoreVideos && (
+        <div className="flex items-center justify-center mb-6">
+          <button
+            onClick={handleLoadMore}
+            disabled={loadingMore}
+            className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg shadow-lg"
+          >
+            {loadingMore ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Loading More...
+              </>
+            ) : (
+              <>
+                Load More Videos
+                <span className="text-sm opacity-75">({totalLoaded} loaded)</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Video Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
@@ -335,29 +381,6 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
           );
         })}
       </div>
-
-      {/* Load More Button */}
-      {videos.length > 0 && hasMoreVideos && (
-        <div className="flex items-center justify-center mt-8">
-          <button
-            onClick={handleLoadMore}
-            disabled={loadingMore}
-            className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg shadow-lg"
-          >
-            {loadingMore ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                Loading More...
-              </>
-            ) : (
-              <>
-                Load More Videos
-                <span className="text-sm opacity-75">({totalLoaded} loaded)</span>
-              </>
-            )}
-          </button>
-        </div>
-      )}
 
       {/* No more videos message */}
       {videos.length > 0 && !hasMoreVideos && !loading && (

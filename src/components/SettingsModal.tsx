@@ -2,74 +2,38 @@ import { useState, useEffect } from 'react';
 import { X, Settings as SettingsIcon } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { fetchOpenRouterModels } from '../services/aiProcessors';
-import axios from 'axios';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const TOKEN_SERVER_URL = 'http://localhost:5555';
-
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { settings, updateSettings } = useSettingsStore();
   const [localSettings, setLocalSettings] = useState(settings);
   const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; name: string }>>([]);
   const [modelSearch, setModelSearch] = useState('');
-  const [tokenStatus, setTokenStatus] = useState<'loading' | 'success' | 'error' | 'idle'>('idle');
-  const [tokenMessage, setTokenMessage] = useState('');
+  const [channelUrlsText, setChannelUrlsText] = useState('');
 
   useEffect(() => {
     setLocalSettings(settings);
+    setChannelUrlsText(settings.channelUrls.join('\n'));
   }, [settings]);
 
   useEffect(() => {
     if (isOpen) {
       fetchOpenRouterModels().then(setOpenRouterModels);
-      // Auto-fetch token from server when modal opens
-      autoFetchToken();
     }
   }, [isOpen]);
 
-  // Automatically fetch token from background server
-  const autoFetchToken = async () => {
-    if (!localSettings.enableDriveUpload) {
-      return; // Don't fetch if Drive upload is disabled
-    }
-
-    setTokenStatus('loading');
-    setTokenMessage('Fetching token from token.pickle...');
-
-    try {
-      const response = await axios.get(`${TOKEN_SERVER_URL}/token`, {
-        timeout: 3000
-      });
-
-      if (response.data.success && response.data.token) {
-        setLocalSettings({
-          ...localSettings,
-          googleDriveAccessToken: response.data.token
-        });
-        setTokenStatus('success');
-        setTokenMessage('✓ Token loaded automatically from token.pickle!');
-      } else {
-        setTokenStatus('error');
-        setTokenMessage('Failed to get token from server');
-      }
-    } catch (error) {
-      setTokenStatus('error');
-      if (axios.isAxiosError(error) && error.code === 'ECONNREFUSED') {
-        setTokenMessage('Token server not running. Make sure to start with: npm run dev');
-      } else if (axios.isAxiosError(error) && error.response?.data?.message) {
-        setTokenMessage(error.response.data.message);
-      } else {
-        setTokenMessage('Could not connect to token server');
-      }
-    }
-  };
-
   const handleSave = () => {
-    updateSettings(localSettings);
+    // Parse channel URLs one final time before saving
+    const urls = channelUrlsText
+      .split('\n')
+      .map(url => url.trim())
+      .filter(url => url.length > 0);
+
+    updateSettings({ ...localSettings, channelUrls: urls });
     onClose();
   };
 
@@ -189,16 +153,22 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 YouTube Channel URLs (one per line)
               </label>
               <textarea
-                value={localSettings.channelUrls.join('\n')}
+                value={channelUrlsText}
                 onChange={(e) => {
-                  const urls = e.target.value
+                  // Just update the text as-is, don't parse yet
+                  setChannelUrlsText(e.target.value);
+                }}
+                onBlur={() => {
+                  // Parse URLs when user finishes editing (clicks away)
+                  const urls = channelUrlsText
                     .split('\n')
                     .map(url => url.trim())
                     .filter(url => url.length > 0);
                   setLocalSettings({ ...localSettings, channelUrls: urls });
                 }}
-                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] font-mono text-sm"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] font-mono text-sm resize-y"
                 placeholder="https://www.youtube.com/@channel1&#10;https://www.youtube.com/@channel2&#10;https://www.youtube.com/@channel3"
+                rows={5}
               />
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 Add multiple channel URLs (one per line). Formats: youtube.com/@username, youtube.com/channel/ID, youtube.com/c/name
@@ -243,7 +213,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
           {/* Custom Prompt */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Custom Prompt</h3>
+            <h3 className="text-lg font-semibold">Script Processing Prompt</h3>
             <div>
               <textarea
                 value={localSettings.customPrompt}
@@ -255,6 +225,24 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               />
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                 This prompt will be prepended to each transcript chunk before processing.
+              </p>
+            </div>
+          </div>
+
+          {/* Title Generation Prompt */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-semibold">Title Generation Prompt</h3>
+            <div>
+              <textarea
+                value={localSettings.titlePrompt}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, titlePrompt: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                placeholder="Enter your title generation prompt..."
+              />
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                This prompt will be used to generate video titles for your processed scripts.
               </p>
             </div>
           </div>
@@ -353,108 +341,48 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             </div>
           </div>
 
-          {/* Google Drive Settings */}
+          {/* Telegram Settings */}
           <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
-            <h3 className="text-lg font-semibold">Google Drive Integration (AUTOMATIC!)</h3>
+            <h3 className="text-lg font-semibold">Telegram Integration</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Configure your Telegram bot to send notifications or messages.
+            </p>
 
-            {/* Enable/Disable Toggle */}
-            <div className="flex items-center gap-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-              <input
-                type="checkbox"
-                id="enableDriveUpload"
-                checked={localSettings.enableDriveUpload}
-                onChange={(e) => {
-                  setLocalSettings({ ...localSettings, enableDriveUpload: e.target.checked });
-                  if (e.target.checked) {
-                    autoFetchToken();
-                  }
-                }}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
-              />
-              <label htmlFor="enableDriveUpload" className="font-medium cursor-pointer">
-                Enable Google Drive Upload
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Telegram Bot Token
               </label>
+              <input
+                type="password"
+                value={localSettings.telegramBotToken}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, telegramBotToken: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your Telegram bot token"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Get your bot token from @BotFather on Telegram
+              </p>
             </div>
 
-            {localSettings.enableDriveUpload && (
-              <>
-                {/* Automatic Token Status */}
-                {tokenStatus !== 'idle' && (
-                  <div className={`p-3 rounded-md border ${
-                    tokenStatus === 'loading' ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200' :
-                    tokenStatus === 'success' ? 'bg-green-50 dark:bg-green-900/20 border-green-200' :
-                    'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200'
-                  }`}>
-                    <p className={`text-sm font-medium ${
-                      tokenStatus === 'loading' ? 'text-blue-800 dark:text-blue-200' :
-                      tokenStatus === 'success' ? 'text-green-800 dark:text-green-200' :
-                      'text-yellow-800 dark:text-yellow-200'
-                    }`}>
-                      {tokenStatus === 'loading' && '🔄 '}
-                      {tokenStatus === 'success' && '✅ '}
-                      {tokenStatus === 'error' && '⚠️ '}
-                      {tokenMessage}
-                    </p>
-                  </div>
-                )}
-
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
-                  <p className="text-sm text-green-800 dark:text-green-200 font-bold mb-2">
-                    ✨ FULLY AUTOMATIC - NO MANUAL STEPS!
-                  </p>
-                  <ol className="text-xs text-green-700 dark:text-green-300 space-y-1 list-decimal list-inside">
-                    <li>Put <code className="bg-green-100 dark:bg-green-900 px-1 rounded font-mono">token.pickle</code> in project folder</li>
-                    <li>Enable "Google Drive Upload" checkbox above</li>
-                    <li>Done! Token loads automatically</li>
-                  </ol>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-3 font-semibold">
-                    🚀 Token auto-refreshes when expired - no manual work!
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                    💡 Background server handles everything automatically
-                  </p>
-                </div>
-
-                {/* Manual Token Field (fallback) */}
-                <details className="text-sm">
-                  <summary className="cursor-pointer text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200">
-                    Advanced: Manual Token Override (click to expand)
-                  </summary>
-                  <div className="mt-2">
-                    <label className="block text-sm font-medium mb-2">
-                      Google Drive Access Token (Manual)
-                    </label>
-                    <input
-                      type="password"
-                      value={localSettings.googleDriveAccessToken}
-                      onChange={(e) =>
-                        setLocalSettings({ ...localSettings, googleDriveAccessToken: e.target.value })
-                      }
-                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
-                      placeholder="Only needed if automatic fails"
-                    />
-                  </div>
-                </details>
-
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    Google Drive Folder ID (Optional)
-                  </label>
-                  <input
-                    type="text"
-                    value={localSettings.googleDriveFolderId}
-                    onChange={(e) =>
-                      setLocalSettings({ ...localSettings, googleDriveFolderId: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Leave empty for root folder"
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Get folder ID from Drive URL: <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">drive.google.com/drive/folders/FOLDER_ID</code>
-                  </p>
-                </div>
-              </>
-            )}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Telegram Chat ID
+              </label>
+              <input
+                type="text"
+                value={localSettings.telegramChatId}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, telegramChatId: e.target.value })
+                }
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter your Telegram chat ID"
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Get your chat ID from @userinfobot on Telegram
+              </p>
+            </div>
           </div>
         </div>
 
