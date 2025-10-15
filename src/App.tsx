@@ -686,6 +686,11 @@ function App() {
   const handleTitleSkipFromConfirm = async () => {
     console.log('⏭️ User skipped title generation from confirm');
     setShowTitleConfirm(false);
+
+    // Clear results to go back to homepage (VideoGrid)
+    setResults(null);
+    setCurrentUrl('');
+
     // Script already downloaded, just process next video
     await processNextVideo();
   };
@@ -905,6 +910,15 @@ function App() {
         onProcess={handleProcess}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        onGoHome={() => {
+          // Clear all processing states and go back to homepage
+          setResults(null);
+          setCurrentUrl('');
+          setShowTranscriptApproval(false);
+          setShowTitleConfirm(false);
+          setShowTitleGenerator(false);
+          setProcessingState({ isProcessing: false, status: '' });
+        }}
         isProcessing={processingState.isProcessing}
       />
 

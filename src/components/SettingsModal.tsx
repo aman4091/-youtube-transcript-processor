@@ -290,11 +290,17 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
             {localSettings.channelUrls.length > 0 && (
               <div>
                 <label className="block text-sm font-medium mb-3">
-                  Minimum Video Duration per Channel (minutes)
+                  Minimum Video Duration per Channel (HH:MM:SS)
                 </label>
                 <div className="space-y-3">
                   {localSettings.channelUrls.map((channelUrl, index) => {
-                    const currentDuration = localSettings.channelMinDurations[channelUrl] || 27;
+                    const currentDurationMinutes = localSettings.channelMinDurations[channelUrl] || 1;
+                    // Convert minutes to HH:MM:SS
+                    const hours = Math.floor(currentDurationMinutes / 60);
+                    const minutes = Math.floor(currentDurationMinutes % 60);
+                    const seconds = Math.floor((currentDurationMinutes % 1) * 60);
+                    const timeString = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+
                     // Extract channel name from URL for display
                     const channelName = channelUrl.split('/').pop() || channelUrl;
 
@@ -306,30 +312,34 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <input
-                            type="number"
-                            min="1"
-                            max="180"
-                            value={currentDuration}
+                            type="text"
+                            value={timeString}
+                            placeholder="00:27:00"
                             onChange={(e) => {
-                              const newDuration = parseInt(e.target.value) || 27;
-                              setLocalSettings({
-                                ...localSettings,
-                                channelMinDurations: {
-                                  ...localSettings.channelMinDurations,
-                                  [channelUrl]: newDuration,
-                                },
-                              });
+                              const value = e.target.value;
+                              // Parse HH:MM:SS to minutes
+                              const parts = value.split(':').map(p => parseInt(p) || 0);
+                              if (parts.length === 3) {
+                                const [h, m, s] = parts;
+                                const totalMinutes = h * 60 + m + s / 60;
+                                setLocalSettings({
+                                  ...localSettings,
+                                  channelMinDurations: {
+                                    ...localSettings.channelMinDurations,
+                                    [channelUrl]: totalMinutes > 0 ? totalMinutes : 1,
+                                  },
+                                });
+                              }
                             }}
-                            className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-24 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-center focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
                           />
-                          <span className="text-sm text-gray-600 dark:text-gray-400">min</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Set minimum video duration for each channel. Videos shorter than this will not appear in the grid.
+                  Set minimum video duration for each channel (format: HH:MM:SS, e.g., 00:27:00 for 27 minutes). Videos shorter than this will not appear in the grid.
                 </p>
               </div>
             )}

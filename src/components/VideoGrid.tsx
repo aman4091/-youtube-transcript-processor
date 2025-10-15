@@ -39,18 +39,18 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     setError('');
 
     try {
-      // Calculate minimum duration needed (use the smallest one among all channels)
+      // Calculate minimum duration needed (use the smallest one among all channels, or 1 if none set)
       const minDurations = settings.channelUrls.map(
-        (url) => settings.channelMinDurations[url] || 27
+        (url) => settings.channelMinDurations[url] || 1
       );
-      const minDuration = Math.min(...minDurations, 27);
+      const minDuration = Math.min(...minDurations, ...minDurations.length > 0 ? minDurations : [1]);
 
       const result = await fetchMultipleChannelsVideos(
         settings.channelUrls,
         settings.youtubeApiKey,
         append ? pageTokens : new Map(),
         200, // Load 200 videos per page
-        minDuration // Use calculated minimum duration
+        minDuration // Use calculated minimum duration (no hardcoded 27)
         // Note: Sorting is done client-side in displayVideos
       );
 
@@ -181,7 +181,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
       );
       const minDurationForChannel = matchingChannelUrl
         ? settings.channelMinDurations[matchingChannelUrl]
-        : 27;
+        : 1; // Default to 1 minute if not configured (no hardcoded 27)
 
       const videoDurationMinutes = parseDuration(video.duration);
       return videoDurationMinutes >= minDurationForChannel;
@@ -253,7 +253,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
               Channel Videos
               {selectedChannel !== 'all' && (() => {
                 const channelUrl = Object.keys(settings.channelMinDurations).find(url => url.includes(selectedChannel));
-                const minDur = channelUrl ? settings.channelMinDurations[channelUrl] : 27;
+                const minDur = channelUrl ? settings.channelMinDurations[channelUrl] : 1;
                 return ` (${minDur}+ min)`;
               })()}
             </h2>
