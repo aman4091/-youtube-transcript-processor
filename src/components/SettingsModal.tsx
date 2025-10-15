@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon, Send } from 'lucide-react';
+import { X, Settings as SettingsIcon, Send, Video, VideoOff, Terminal } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
 import { fetchOpenRouterModels } from '../services/aiProcessors';
-import { verifyTelegramCredentials } from '../services/telegramAPI';
+import { verifyTelegramCredentials, sendCommand } from '../services/telegramAPI';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -17,6 +17,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [channelUrlsText, setChannelUrlsText] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Video and FFmpeg states
+  const [videoEnabled, setVideoEnabled] = useState(false);
+  const [isSendingCommand, setIsSendingCommand] = useState(false);
+  const [showFFmpegModal, setShowFFmpegModal] = useState(false);
+  const [ffmpegCommand, setFFmpegCommand] = useState('');
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -71,6 +77,71 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       });
     } finally {
       setIsTesting(false);
+    }
+  };
+
+  const handleToggleVideo = async () => {
+    if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+      alert('⚠️ Please configure Telegram credentials first!');
+      return;
+    }
+
+    setIsSendingCommand(true);
+    const command = videoEnabled ? '/disable_video' : '/enable_video';
+
+    try {
+      const result = await sendCommand(
+        localSettings.telegramBotToken,
+        localSettings.telegramChatId,
+        command
+      );
+
+      if (result.success) {
+        setVideoEnabled(!videoEnabled);
+        console.log(`✓ Sent command: ${command}`);
+      } else {
+        alert(`❌ Failed to send command: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSendingCommand(false);
+    }
+  };
+
+  const handleSendFFmpegCommand = async () => {
+    if (!ffmpegCommand.trim()) {
+      alert('⚠️ Please enter an FFmpeg command!');
+      return;
+    }
+
+    if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
+      alert('⚠️ Please configure Telegram credentials first!');
+      return;
+    }
+
+    setIsSendingCommand(true);
+    const command = `/set_ffmpeg ${ffmpegCommand.trim()}`;
+
+    try {
+      const result = await sendCommand(
+        localSettings.telegramBotToken,
+        localSettings.telegramChatId,
+        command
+      );
+
+      if (result.success) {
+        console.log(`✓ Sent FFmpeg command: ${command}`);
+        setShowFFmpegModal(false);
+        setFFmpegCommand('');
+        alert('✅ FFmpeg command sent successfully!');
+      } else {
+        alert(`❌ Failed to send command: ${result.error}`);
+      }
+    } catch (error) {
+      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsSendingCommand(false);
     }
   };
 
@@ -477,6 +548,44 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             )}
 
+            {/* Bot Command Buttons */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <p className="text-sm font-semibold mb-3 text-gray-700 dark:text-gray-300">
+                Bot Commands (sent to Chat #1)
+              </p>
+              <div className="flex gap-3">
+                {/* Video Toggle Button */}
+                <button
+                  onClick={handleToggleVideo}
+                  disabled={isSendingCommand || !localSettings.telegramBotToken || !localSettings.telegramChatId}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                    isSendingCommand || !localSettings.telegramBotToken || !localSettings.telegramChatId
+                      ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                      : videoEnabled
+                      ? 'bg-red-600 hover:bg-red-700 text-white'
+                      : 'bg-green-600 hover:bg-green-700 text-white'
+                  }`}
+                >
+                  {videoEnabled ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
+                  {isSendingCommand ? 'Sending...' : videoEnabled ? 'Disable Video' : 'Enable Video'}
+                </button>
+
+                {/* FFmpeg Command Button */}
+                <button
+                  onClick={() => setShowFFmpegModal(true)}
+                  disabled={isSendingCommand || !localSettings.telegramBotToken || !localSettings.telegramChatId}
+                  className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-colors ${
+                    isSendingCommand || !localSettings.telegramBotToken || !localSettings.telegramChatId
+                      ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                      : 'bg-purple-600 hover:bg-purple-700 text-white'
+                  }`}
+                >
+                  <Terminal className="w-4 h-4" />
+                  Set FFmpeg Command
+                </button>
+              </div>
+            </div>
+
             {/* Setup Instructions */}
             <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
               <p className="text-sm text-blue-800 dark:text-blue-200 font-bold mb-3">
@@ -555,6 +664,74 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </button>
         </div>
       </div>
+
+      {/* FFmpeg Command Modal */}
+      {showFFmpegModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Terminal className="w-5 h-5" />
+                <h3 className="text-lg font-bold">Set FFmpeg Command</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowFFmpegModal(false);
+                  setFFmpegCommand('');
+                }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <label className="block text-sm font-medium mb-2">
+                FFmpeg Command
+              </label>
+              <input
+                type="text"
+                value={ffmpegCommand}
+                onChange={(e) => setFFmpegCommand(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !isSendingCommand) {
+                    handleSendFFmpegCommand();
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 font-mono text-sm"
+                placeholder="your ffmpeg parameters here"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                This will send: <code className="bg-gray-100 dark:bg-gray-900 px-1 rounded">/set_ffmpeg {ffmpegCommand || '...'}</code>
+              </p>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowFFmpegModal(false);
+                  setFFmpegCommand('');
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendFFmpegCommand}
+                disabled={isSendingCommand || !ffmpegCommand.trim()}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  isSendingCommand || !ffmpegCommand.trim()
+                    ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                    : 'bg-purple-600 hover:bg-purple-700 text-white'
+                }`}
+              >
+                {isSendingCommand ? 'Sending...' : 'Send Command'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

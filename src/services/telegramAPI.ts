@@ -8,6 +8,17 @@ export interface TelegramSendResult {
 }
 
 /**
+ * Send a simple text command to Telegram
+ */
+export async function sendCommand(
+  botToken: string,
+  chatId: string,
+  command: string
+): Promise<TelegramSendResult> {
+  return sendSingleMessage(botToken, chatId, command);
+}
+
+/**
  * Send a single message to Telegram
  */
 async function sendSingleMessage(
