@@ -213,12 +213,59 @@ export async function sendToTelegram(
 }
 
 /**
+ * Get bot info to verify token is valid
+ */
+async function getBotInfo(botToken: string): Promise<{ success: boolean; botUsername?: string; error?: string }> {
+  try {
+    const url = `${TELEGRAM_API_BASE}${botToken}/getMe`;
+    const response = await axios.get(url);
+
+    if (response.data.ok) {
+      return {
+        success: true,
+        botUsername: response.data.result.username
+      };
+    } else {
+      return {
+        success: false,
+        error: 'Invalid bot token'
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: 'Failed to verify bot token'
+    };
+  }
+}
+
+/**
  * Verify Telegram credentials by sending a test message
  */
 export async function verifyTelegramCredentials(
   botToken: string,
   chatId: string
 ): Promise<TelegramSendResult> {
-  const testMessage = '✅ YouTube Processor connected successfully!\n\nYour scripts will be sent to this chat.';
+  console.log('🔍 Verifying Telegram credentials...');
+  console.log('   Bot Token:', botToken.substring(0, 20) + '...');
+  console.log('   Chat ID:', chatId);
+
+  // First verify bot token
+  const botInfo = await getBotInfo(botToken);
+  if (!botInfo.success) {
+    console.error('✗ Bot token is invalid');
+    return {
+      success: false,
+      error: '❌ Invalid Bot Token. Please check your token from @BotFather.'
+    };
+  }
+
+  console.log(`✓ Bot token valid: @${botInfo.botUsername}`);
+  console.log(`📱 Important: Make sure you have started a chat with @${botInfo.botUsername}!`);
+  console.log(`   1. Search for @${botInfo.botUsername} on Telegram`);
+  console.log(`   2. Click START or send /start`);
+  console.log(`   3. Then try this test again`);
+
+  const testMessage = `✅ YouTube Processor connected successfully!\n\nYour scripts will be sent to this chat.\n\nBot: @${botInfo.botUsername}`;
   return sendSingleMessage(botToken, chatId, testMessage);
 }

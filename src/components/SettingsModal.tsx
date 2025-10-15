@@ -446,17 +446,65 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             )}
 
-            {/* Help Box */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-3">
-              <p className="text-sm text-blue-800 dark:text-blue-200 font-semibold mb-2">
-                📱 How to get Chat ID:
+            {/* Setup Instructions */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+              <p className="text-sm text-blue-800 dark:text-blue-200 font-bold mb-3">
+                🤖 Complete Setup Guide:
               </p>
-              <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside">
-                <li>Open Telegram and search for @userinfobot</li>
-                <li>Send /start to the bot</li>
-                <li>Copy your chat ID (it will be a number)</li>
-                <li>For channels: Use @getidsbot or check channel URL</li>
-              </ol>
+
+              <div className="space-y-3">
+                {/* Step 1 */}
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                    Step 1: Create Bot (if needed)
+                  </p>
+                  <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5 list-decimal list-inside ml-2">
+                    <li>Search for @BotFather on Telegram</li>
+                    <li>Send /newbot command</li>
+                    <li>Follow instructions to create bot</li>
+                    <li>Copy the token (looks like: 123456:ABC-DEF...)</li>
+                  </ol>
+                </div>
+
+                {/* Step 2 */}
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                    Step 2: Start Chat with Your Bot ⚠️ IMPORTANT!
+                  </p>
+                  <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5 list-decimal list-inside ml-2">
+                    <li>Search for your bot (use bot username from BotFather)</li>
+                    <li><strong>Click START button or send /start</strong></li>
+                    <li>You should see "Start" button at bottom</li>
+                  </ol>
+                  <p className="text-xs text-red-600 dark:text-red-400 font-bold mt-1 ml-2">
+                    ⚠️ "Chat not found" = You didn't start the bot!
+                  </p>
+                </div>
+
+                {/* Step 3 */}
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                    Step 3: Get Your Chat ID
+                  </p>
+                  <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5 list-decimal list-inside ml-2">
+                    <li>Search for @userinfobot on Telegram</li>
+                    <li>Send /start to it</li>
+                    <li>Copy your ID (e.g., 123456789)</li>
+                  </ol>
+                </div>
+
+                {/* Step 4 */}
+                <div>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 font-semibold mb-1">
+                    Step 4: For Channels (Optional)
+                  </p>
+                  <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-0.5 list-decimal list-inside ml-2">
+                    <li>Add your bot as channel admin</li>
+                    <li>Use @getidsbot to get channel ID</li>
+                    <li>Channel IDs start with -100 (e.g., -1001234567890)</li>
+                  </ol>
+                </div>
+              </div>
             </div>
           </div>
         </div>
