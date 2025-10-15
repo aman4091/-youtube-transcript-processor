@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Check, FileText, ArrowLeftRight, RefreshCw } from 'lucide-react';
+import { Check, FileText, ArrowLeftRight, RefreshCw, Send } from 'lucide-react';
 import { formatCharacterCount } from '../utils/characterCounter';
 
 interface SideBySideComparisonProps {
@@ -18,11 +18,13 @@ interface SideBySideComparisonProps {
   onRewrite?: () => void;
   pendingCount?: number;
   isWaitingForUserAction?: boolean;
+  queueCount?: number;
+  onPushToChat?: () => void;
 }
 
 type ModelType = 'transcript' | 'deepseek' | 'gemini-flash' | 'gemini-pro' | 'openrouter';
 
-export default function SideBySideComparison({ transcript, outputs, onSelectFinal, onRewrite, pendingCount, isWaitingForUserAction }: SideBySideComparisonProps) {
+export default function SideBySideComparison({ transcript, outputs, onSelectFinal, onRewrite, pendingCount, isWaitingForUserAction, queueCount, onPushToChat }: SideBySideComparisonProps) {
   const [leftModel, setLeftModel] = useState<ModelType>('transcript');
   const [rightModel, setRightModel] = useState<ModelType>('gemini-flash');
 
@@ -227,6 +229,25 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
               >
                 <RefreshCw className="w-4 h-4" />
                 Rewrite
+              </button>
+            )}
+            {onPushToChat && queueCount !== undefined && (
+              <button
+                onClick={onPushToChat}
+                disabled={queueCount === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors font-medium text-sm relative ${
+                  queueCount === 0
+                    ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 dark:text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'
+                }`}
+              >
+                <Send className="w-4 h-4" />
+                <span>Push to Chat</span>
+                {queueCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-md">
+                    {queueCount}
+                  </span>
+                )}
               </button>
             )}
             <button

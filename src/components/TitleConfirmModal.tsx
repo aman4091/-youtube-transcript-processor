@@ -1,5 +1,3 @@
-import { X } from 'lucide-react';
-
 interface TitleConfirmModalProps {
   onConfirm: () => void;
   onSkip: () => void;

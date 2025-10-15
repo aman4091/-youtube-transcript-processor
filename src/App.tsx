@@ -10,6 +10,7 @@ import TitleGenerator from './components/TitleGenerator';
 import TitleConfirmModal from './components/TitleConfirmModal';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
+import { useTempQueueStore } from './stores/tempQueueStore';
 import { fetchYouTubeTranscript } from './services/supaDataAPI';
 import { fetchMultipleChannelsVideos, YouTubeVideo } from './services/youtubeAPI';
 import {
@@ -20,6 +21,7 @@ import {
 } from './services/aiProcessors';
 import { chunkText } from './utils/chunkingService';
 import { cleanMarkdown } from './utils/markdownCleaner';
+import { sendToTelegram } from './services/telegramAPI';
 
 interface ProcessingState {
   isProcessing: boolean;
@@ -76,6 +78,7 @@ function App() {
 
   const { settings } = useSettingsStore();
   const { addProcessedLink, saveOutput } = useHistoryStore();
+  const { addToQueue, getQueue, clearQueue, getQueueCount } = useTempQueueStore();
 
   const handleProcess = async (
     url: string,
@@ -666,6 +669,16 @@ function App() {
       URL.revokeObjectURL(url);
       console.log(`✓ Script downloaded: ${filename}`);
 
+      // ADD TO QUEUE for Telegram push
+      addToQueue(
+        output,
+        modelName,
+        counter,
+        currentVideoInfo?.title,
+        currentUrl
+      );
+      console.log(`📝 Added to Telegram queue (${getQueueCount()} items total)`);
+
       // Store current script, model name, and counter for later use
       setCurrentScript(output);
       setCurrentModelName(modelName);
@@ -740,6 +753,111 @@ function App() {
     await processNextVideo();
   };
 
+  // Handler for pushing queued scripts to Telegram
+  const handlePushToChat = async () => {
+    console.log('\n📤 Starting push to Telegram...');
+
+    // Check Telegram credentials
+    if (!settings.telegramBotToken || !settings.telegramChatId) {
+      alert('⚠️ Telegram not configured!\n\nPlease add your Bot Token and Chat ID in Settings.');
+      return;
+    }
+
+    // Get queued scripts
+    const queue = getQueue();
+
+    if (queue.length === 0) {
+      alert('📭 No scripts in queue to push!');
+      return;
+    }
+
+    console.log(`📦 Found ${queue.length} scripts in queue`);
+
+    // Confirm before sending
+    const confirmMessage = `Send ${queue.length} script${queue.length > 1 ? 's' : ''} to Telegram?`;
+    if (!confirm(confirmMessage)) {
+      console.log('❌ User canceled push');
+      return;
+    }
+
+    // Show processing status
+    setProcessingState({
+      isProcessing: true,
+      status: `Pushing to Telegram (0/${queue.length})...`,
+    });
+
+    let successCount = 0;
+    let failCount = 0;
+    let errors: string[] = [];
+
+    // Send each script (oldest to newest)
+    for (let i = 0; i < queue.length; i++) {
+      const script = queue[i];
+      console.log(`\n📤 Sending script ${i + 1}/${queue.length}: ${script.modelName}`);
+
+      setProcessingState({
+        isProcessing: true,
+        status: `Pushing to Telegram (${i + 1}/${queue.length})...`,
+      });
+
+      try {
+        const result = await sendToTelegram(
+          settings.telegramBotToken,
+          settings.telegramChatId,
+          script.content,
+          script.modelName,
+          script.videoTitle,
+          script.videoUrl
+        );
+
+        if (result.success) {
+          successCount++;
+          if (result.messageCount && result.messageCount > 1) {
+            console.log(`✓ Sent as ${result.messageCount} messages`);
+          } else {
+            console.log('✓ Sent successfully');
+          }
+        } else {
+          failCount++;
+          errors.push(`${script.modelName}: ${result.error}`);
+          console.error(`✗ Failed: ${result.error}`);
+        }
+
+        // Add delay between messages to avoid rate limiting
+        if (i < queue.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+      } catch (error) {
+        failCount++;
+        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+        errors.push(`${script.modelName}: ${errorMsg}`);
+        console.error(`✗ Error sending script:`, error);
+      }
+    }
+
+    // Clear processing status
+    setProcessingState({ isProcessing: false, status: '' });
+
+    // Show results
+    if (successCount === queue.length) {
+      console.log(`\n✅ All ${successCount} scripts sent successfully!`);
+      alert(`✅ Success!\n\n${successCount} script${successCount > 1 ? 's' : ''} sent to Telegram!`);
+      // Clear queue on success
+      clearQueue();
+      console.log('🗑️ Queue cleared');
+    } else if (successCount > 0) {
+      console.log(`\n⚠️ Partial success: ${successCount}/${queue.length} sent`);
+      const errorSummary = errors.join('\n');
+      alert(`⚠️ Partial Success\n\nSent: ${successCount}\nFailed: ${failCount}\n\nErrors:\n${errorSummary}`);
+      // Don't clear queue if some failed
+    } else {
+      console.log(`\n✗ All ${failCount} scripts failed`);
+      const errorSummary = errors.join('\n');
+      alert(`❌ Failed to send scripts\n\n${errorSummary}`);
+      // Don't clear queue if all failed
+    }
+  };
+
   // If history view is open, show only history page
   if (isHistoryOpen) {
     return (
@@ -799,6 +917,8 @@ function App() {
           onRewrite={handleRewrite}
           pendingCount={pendingVideos.length}
           isWaitingForUserAction={isWaitingForUserAction}
+          queueCount={getQueueCount()}
+          onPushToChat={handlePushToChat}
         />
       ) : !showTranscriptApproval ? (
         <VideoGrid
