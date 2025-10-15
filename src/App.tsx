@@ -656,20 +656,8 @@ function App() {
 
       // Get next sequential counter
       const counter = getNextCounter();
-      const filename = `${counter}.txt`;
 
-      // Download script FIRST
-      const blob = new Blob([output], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      console.log(`✓ Script downloaded: ${filename}`);
-
+      // NO LOCAL DOWNLOAD - just add to queue
       // ADD TO QUEUE for Telegram push
       addToQueue(
         output,
@@ -678,7 +666,7 @@ function App() {
         currentVideoInfo?.title,
         currentUrl
       );
-      console.log(`📝 Added to Telegram queue (${getQueueCount()} items total)`);
+      console.log(`📝 Added to Telegram queue (${getQueueCount()} items total) - Counter: ${counter}`);
 
       // Store current script and counter for later use
       setCurrentScript(output);
@@ -732,21 +720,7 @@ function App() {
     updateGeneratedTitle(currentCounter, title);
     console.log(`📝 Title saved to queue for counter: ${currentCounter}`);
 
-    // Download title with same counter
-    await new Promise(resolve => setTimeout(resolve, 100));
-
-    const titleBlob = new Blob([title], { type: 'text/plain;charset=utf-8' });
-    const titleUrl = URL.createObjectURL(titleBlob);
-    const titleLink = document.createElement('a');
-    titleLink.href = titleUrl;
-    titleLink.download = `${currentCounter}_title.txt`;
-    document.body.appendChild(titleLink);
-    titleLink.click();
-    document.body.removeChild(titleLink);
-    URL.revokeObjectURL(titleUrl);
-    console.log(`✓ Title downloaded: ${currentCounter}_title.txt`);
-
-    alert('Output and title downloaded!');
+    // NO LOCAL DOWNLOAD - title will be sent via Telegram only
     await processNextVideo();
   };
 
@@ -887,11 +861,10 @@ function App() {
     // Clear processing status
     setProcessingState({ isProcessing: false, status: '' });
 
-    // Show results
+    // Show results - NO SUCCESS ALERT, only show errors
     if (failCount === 0) {
       console.log(`\n✅ All scripts sent successfully!`);
-      alert(`✅ Success!\n\n${queue.length} script${queue.length > 1 ? 's' : ''} sent to Telegram!`);
-      // Clear queue on success
+      // NO ALERT - just clear queue silently
       clearQueue();
       console.log('🗑️ Queue cleared');
     } else if (successCount > 0) {
