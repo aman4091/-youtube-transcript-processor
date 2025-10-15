@@ -240,6 +240,13 @@ async function getBotInfo(botToken: string): Promise<{ success: boolean; botUser
 }
 
 /**
+ * Check if chat ID is a channel (starts with -100)
+ */
+function isChannel(chatId: string): boolean {
+  return chatId.startsWith('-100');
+}
+
+/**
  * Verify Telegram credentials by sending a test message
  */
 export async function verifyTelegramCredentials(
@@ -261,10 +268,32 @@ export async function verifyTelegramCredentials(
   }
 
   console.log(`✓ Bot token valid: @${botInfo.botUsername}`);
-  console.log(`📱 Important: Make sure you have started a chat with @${botInfo.botUsername}!`);
-  console.log(`   1. Search for @${botInfo.botUsername} on Telegram`);
-  console.log(`   2. Click START or send /start`);
-  console.log(`   3. Then try this test again`);
+
+  // Check if this is a channel
+  if (isChannel(chatId)) {
+    console.log('📢 Detected CHANNEL ID (starts with -100)');
+    console.log('');
+    console.log('⚠️ FOR CHANNELS, YOU MUST:');
+    console.log(`   1. Add @${botInfo.botUsername} as ADMINISTRATOR to your channel`);
+    console.log('   2. Give permissions: "Post Messages" (minimum)');
+    console.log('   3. Also start a personal chat with the bot (search bot → START)');
+    console.log('');
+    console.log('📱 Steps to add bot as admin:');
+    console.log('   1. Open your channel');
+    console.log('   2. Channel info → Administrators');
+    console.log('   3. Add Administrator → Search your bot');
+    console.log(`   4. Select @${botInfo.botUsername}`);
+    console.log('   5. Enable "Post Messages" permission');
+    console.log('   6. Save');
+    console.log('');
+  } else {
+    console.log('👤 Detected PERSONAL CHAT ID');
+    console.log(`📱 Make sure you have started a chat with @${botInfo.botUsername}!`);
+    console.log(`   1. Search for @${botInfo.botUsername} on Telegram`);
+    console.log(`   2. Click START or send /start`);
+    console.log(`   3. Then try this test again`);
+    console.log('');
+  }
 
   const testMessage = `✅ YouTube Processor connected successfully!\n\nYour scripts will be sent to this chat.\n\nBot: @${botInfo.botUsername}`;
   return sendSingleMessage(botToken, chatId, testMessage);
