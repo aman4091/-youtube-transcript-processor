@@ -285,6 +285,54 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 {localSettings.channelUrls.length} channel(s) configured
               </p>
             </div>
+
+            {/* Channel-specific Min Duration */}
+            {localSettings.channelUrls.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium mb-3">
+                  Minimum Video Duration per Channel (minutes)
+                </label>
+                <div className="space-y-3">
+                  {localSettings.channelUrls.map((channelUrl, index) => {
+                    const currentDuration = localSettings.channelMinDurations[channelUrl] || 27;
+                    // Extract channel name from URL for display
+                    const channelName = channelUrl.split('/').pop() || channelUrl;
+
+                    return (
+                      <div key={index} className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{channelName}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{channelUrl}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <input
+                            type="number"
+                            min="1"
+                            max="180"
+                            value={currentDuration}
+                            onChange={(e) => {
+                              const newDuration = parseInt(e.target.value) || 27;
+                              setLocalSettings({
+                                ...localSettings,
+                                channelMinDurations: {
+                                  ...localSettings.channelMinDurations,
+                                  [channelUrl]: newDuration,
+                                },
+                              });
+                            }}
+                            className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                          <span className="text-sm text-gray-600 dark:text-gray-400">min</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Set minimum video duration for each channel. Videos shorter than this will not appear in the grid.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* OpenRouter Model Selection */}

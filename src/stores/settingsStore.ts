@@ -22,6 +22,8 @@ export interface Settings {
   enableOpenRouter: boolean;
   // Video sort order
   videoSortOrder: 'date' | 'popular';
+  // Channel-specific min duration (in minutes) - key: channel URL, value: min duration
+  channelMinDurations: Record<string, number>;
 }
 
 interface SettingsStore {
@@ -51,6 +53,8 @@ const defaultSettings: Settings = {
   enableOpenRouter: true,
   // Video sort - popular by default
   videoSortOrder: 'popular',
+  // Channel min durations - default 27 minutes for all
+  channelMinDurations: {},
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -72,7 +76,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'youtube-processor-settings',
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating settings from version ${version}`);
         // Migrate old channelUrl (string) to channelUrls (array)
@@ -116,6 +120,10 @@ export const useSettingsStore = create<SettingsStore>()(
         // Migrate to version 7 - add second Telegram chat ID
         if (version < 7) {
           persistedState.settings.telegramChatIdWithTitle = persistedState.settings.telegramChatIdWithTitle || '';
+        }
+        // Migrate to version 8 - add channel min durations
+        if (version < 8) {
+          persistedState.settings.channelMinDurations = persistedState.settings.channelMinDurations || {};
         }
         console.log('✓ Settings migrated successfully');
         return persistedState;

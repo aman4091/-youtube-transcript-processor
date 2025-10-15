@@ -8,14 +8,57 @@ export interface TelegramSendResult {
 }
 
 /**
- * Send a simple text command to Telegram
+ * Send a simple text command to Telegram (without Markdown parsing)
  */
 export async function sendCommand(
   botToken: string,
   chatId: string,
   command: string
 ): Promise<TelegramSendResult> {
-  return sendSingleMessage(botToken, chatId, command);
+  try {
+    const url = `${TELEGRAM_API_BASE}${botToken}/sendMessage`;
+
+    console.log(`📤 Sending command to Telegram: ${command}`);
+    console.log(`   Chat ID: ${chatId}`);
+
+    const response = await axios.post(url, {
+      chat_id: chatId,
+      text: command,
+      // No parse_mode - send as plain text to avoid formatting issues
+    });
+
+    if (response.data.ok) {
+      console.log('✓ Command sent successfully');
+      return { success: true };
+    } else {
+      console.error('✗ Telegram API response not OK:', response.data);
+      return {
+        success: false,
+        error: response.data.description || 'Unknown error from Telegram',
+      };
+    }
+  } catch (error) {
+    console.error('✗ Telegram API error:', error);
+
+    if (axios.isAxiosError(error)) {
+      console.error('   Status:', error.response?.status);
+      console.error('   Response data:', error.response?.data);
+
+      if (error.response?.status === 401) {
+        return { success: false, error: 'Invalid bot token. Please check your settings.' };
+      } else if (error.response?.status === 400) {
+        const telegramError = error.response?.data?.description || 'Invalid chat ID or message format.';
+        return { success: false, error: `Telegram Error: ${telegramError}` };
+      } else if (error.response?.data?.description) {
+        return { success: false, error: error.response.data.description };
+      }
+    }
+
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Failed to send command to Telegram',
+    };
+  }
 }
 
 /**

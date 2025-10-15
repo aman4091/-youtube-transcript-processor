@@ -720,6 +720,10 @@ function App() {
     updateGeneratedTitle(currentCounter, title);
     console.log(`📝 Title saved to queue for counter: ${currentCounter}`);
 
+    // Clear results to go back to homepage (VideoGrid)
+    setResults(null);
+    setCurrentUrl('');
+
     // NO LOCAL DOWNLOAD - title will be sent via Telegram only
     await processNextVideo();
   };
@@ -727,6 +731,11 @@ function App() {
   const handleSkipTitle = async () => {
     console.log('⏭️ Title generation skipped');
     setShowTitleGenerator(false);
+
+    // Clear results to go back to homepage (VideoGrid)
+    setResults(null);
+    setCurrentUrl('');
+
     await processNextVideo();
   };
 

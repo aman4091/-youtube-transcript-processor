@@ -39,12 +39,18 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     setError('');
 
     try {
+      // Calculate minimum duration needed (use the smallest one among all channels)
+      const minDurations = settings.channelUrls.map(
+        (url) => settings.channelMinDurations[url] || 27
+      );
+      const minDuration = Math.min(...minDurations, 27);
+
       const result = await fetchMultipleChannelsVideos(
         settings.channelUrls,
         settings.youtubeApiKey,
         append ? pageTokens : new Map(),
         200, // Load 200 videos per page
-        27 // Minimum 27 minutes
+        minDuration // Use calculated minimum duration
         // Note: Sorting is done client-side in displayVideos
       );
 
@@ -147,9 +153,39 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   // Get unique channel names
   const uniqueChannels = Array.from(new Set(videos.map(v => v.channelTitle))).sort();
 
+  // Helper function to parse duration string (e.g., "27:35" -> 27.58 minutes)
+  const parseDuration = (duration: string): number => {
+    const parts = duration.split(':').map(Number);
+    if (parts.length === 3) {
+      // HH:MM:SS
+      return parts[0] * 60 + parts[1] + parts[2] / 60;
+    } else if (parts.length === 2) {
+      // MM:SS
+      return parts[0] + parts[1] / 60;
+    }
+    return 0;
+  };
+
   // Filter and sort videos
   const displayVideos = videos
-    .filter(video => selectedChannel === 'all' || video.channelTitle === selectedChannel)
+    .filter(video => {
+      // Channel filter
+      if (selectedChannel !== 'all' && video.channelTitle !== selectedChannel) {
+        return false;
+      }
+
+      // Duration filter based on channel-specific settings
+      // Get min duration for this video's channel by matching channel title
+      const matchingChannelUrl = Object.keys(settings.channelMinDurations).find(
+        url => url.includes(video.channelTitle)
+      );
+      const minDurationForChannel = matchingChannelUrl
+        ? settings.channelMinDurations[matchingChannelUrl]
+        : 27;
+
+      const videoDurationMinutes = parseDuration(video.duration);
+      return videoDurationMinutes >= minDurationForChannel;
+    })
     .sort((a, b) => {
       if (settings.videoSortOrder === 'popular') {
         // Sort by view count (highest first)
@@ -213,7 +249,14 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
       <div className="mb-4 sm:mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
           <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2 truncate">Channel Videos (27+ minutes)</h2>
+            <h2 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2 truncate">
+              Channel Videos
+              {selectedChannel !== 'all' && (() => {
+                const channelUrl = Object.keys(settings.channelMinDurations).find(url => url.includes(selectedChannel));
+                const minDur = channelUrl ? settings.channelMinDurations[channelUrl] : 27;
+                return ` (${minDur}+ min)`;
+              })()}
+            </h2>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
               {settings.channelUrls.length} channel(s) • Showing {displayVideos.length} of {totalLoaded} videos
               {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
