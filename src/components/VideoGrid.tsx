@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, CheckCircle, Loader2, Eye, Clock, Send } from 'lucide-react';
+import { Play, CheckCircle, Loader2, Eye, Clock, Send, Search, X } from 'lucide-react';
 import { fetchLatestVideosWithCache, loadMoreChannelVideos, YouTubeVideo } from '../services/youtubeAPI';
 import { getCachedVideos, mergeVideos, getCachedPageToken } from '../utils/videoCache';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -27,6 +27,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   const [cacheStats, setCacheStats] = useState<{ fromCache: number; fromAPI: number }>({ fromCache: 0, fromAPI: 0 });
   const [pageTokens, setPageTokens] = useState<Map<string, string | undefined>>(new Map());
   const [hasMoreVideos, setHasMoreVideos] = useState(false);
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Load cached videos only (no API call)
   const loadCachedVideos = () => {
@@ -237,6 +238,17 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
         return false;
       }
 
+      // Search filter - matches against title and channel name
+      if (searchQuery.trim()) {
+        const query = searchQuery.toLowerCase();
+        const titleMatch = video.title.toLowerCase().includes(query);
+        const channelMatch = video.channelTitle.toLowerCase().includes(query);
+
+        if (!titleMatch && !channelMatch) {
+          return false;
+        }
+      }
+
       // Channel filter
       if (selectedChannel !== 'all' && video.channelTitle !== selectedChannel) {
         return false;
@@ -312,30 +324,54 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   }
 
   return (
-    <div className="w-full max-w-[98%] mx-auto px-2 sm:px-4 md:px-6 py-4 sm:py-8 overflow-x-hidden">
+    <div className="w-full mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6">
       {/* Header */}
-      <div className="mb-4 sm:mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg sm:text-2xl font-bold mb-1 sm:mb-2 truncate">
-              Channel Videos
-              {selectedChannel !== 'all' && (() => {
-                const channelUrl = Object.keys(settings.channelMinDurations).find(url => url.includes(selectedChannel));
-                const minDur = channelUrl ? settings.channelMinDurations[channelUrl] : 1;
-                return ` (${minDur}+ min)`;
-              })()}
-            </h2>
-            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
-              {settings.channelUrls.length} channel(s) • {videos.length} total videos ({cacheStats.fromCache} cached, {cacheStats.fromAPI} new) • Showing {displayVideos.length} unprocessed
-              {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
-            </p>
+      <div className="mb-6">
+        {/* Title Section */}
+        <div className="mb-4">
+          <h2 className="text-xl sm:text-2xl md:text-3xl font-bold mb-2">
+            Channel Videos
+            {selectedChannel !== 'all' && (() => {
+              const channelUrl = Object.keys(settings.channelMinDurations).find(url => url.includes(selectedChannel));
+              const minDur = channelUrl ? settings.channelMinDurations[channelUrl] : 1;
+              return ` (${minDur}+ min)`;
+            })()}
+          </h2>
+          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+            {settings.channelUrls.length} channel(s) • {videos.length} total videos ({cacheStats.fromCache} cached, {cacheStats.fromAPI} new) • Showing {displayVideos.length} unprocessed
+            {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
+          </p>
+        </div>
+
+        {/* Search and Filters Row */}
+        <div className="flex flex-col gap-3">
+          {/* Search Input - Full Width on Mobile */}
+          <div className="relative w-full">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search videos..."
+              className="w-full pl-10 pr-10 py-2.5 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 placeholder-gray-400 dark:placeholder-gray-500 focus:border-blue-500 dark:focus:border-blue-400 focus:outline-none transition-colors text-sm"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
-          <div className="flex gap-2 sm:gap-3 flex-wrap">
+
+          {/* Buttons Row - Scrollable on Mobile */}
+          <div className="flex gap-2 overflow-x-auto pb-2 hide-scrollbar">
             {/* Channel Filter Dropdown */}
             <select
               value={selectedChannel}
               onChange={(e) => setSelectedChannel(e.target.value)}
-              className="px-3 sm:px-4 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:border-blue-500 dark:hover:border-blue-400 transition-colors font-medium text-xs sm:text-sm cursor-pointer"
+              className="flex-shrink-0 px-3 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:border-blue-500 dark:hover:border-blue-400 transition-colors font-medium text-sm cursor-pointer"
             >
               <option value="all">All Channels ({videos.length})</option>
               {uniqueChannels.map((channel) => {
@@ -350,7 +386,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
             <button
               onClick={() => updateSettings({ videoSortOrder: settings.videoSortOrder === 'popular' ? 'date' : 'popular' })}
-              className={`px-3 sm:px-4 py-2 rounded-lg transition-colors font-medium text-xs sm:text-sm ${
+              className={`flex-shrink-0 px-4 py-2 rounded-lg transition-colors font-medium text-sm whitespace-nowrap ${
                 settings.videoSortOrder === 'popular'
                   ? 'bg-purple-600 text-white hover:bg-purple-700'
                   : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
@@ -360,7 +396,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
             </button>
             <button
               onClick={() => loadVideos()}
-              className="px-3 sm:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-xs sm:text-sm"
+              className="flex-shrink-0 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm whitespace-nowrap"
             >
               Refresh
             </button>
@@ -369,7 +405,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
             {onPushToChat && getQueueCount() > 0 && (
               <button
                 onClick={onPushToChat}
-                className="flex items-center gap-2 px-3 sm:px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-xs sm:text-sm relative"
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm relative whitespace-nowrap"
               >
                 <Send className="w-4 h-4" />
                 <span>Push to Chat</span>
@@ -383,20 +419,20 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
         {/* Selection Actions */}
         {selectedVideos.size > 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-3 sm:p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-500">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 p-4 bg-blue-50 dark:bg-blue-900/30 rounded-lg border-2 border-blue-500 mt-4">
             <button
               onClick={handleProcessSelected}
-              className="px-4 sm:px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-xs sm:text-sm"
+              className="w-full sm:w-auto px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium text-sm"
             >
               Process {selectedVideos.size} Video{selectedVideos.size > 1 ? 's' : ''}
             </button>
             <button
               onClick={() => setSelectedVideos(new Set())}
-              className="px-3 sm:px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-xs sm:text-sm"
+              className="w-full sm:w-auto px-4 py-2.5 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm"
             >
-              Clear
+              Clear Selection
             </button>
-            <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-300 sm:ml-auto break-words">
+            <span className="text-sm text-gray-600 dark:text-gray-300 sm:ml-auto text-center sm:text-left">
               Videos will be processed one by one
             </span>
           </div>
@@ -409,7 +445,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
           <button
             onClick={loadMoreVideos}
             disabled={loadingMore}
-            className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg shadow-lg"
+            className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 sm:px-8 py-3 sm:py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-base sm:text-lg shadow-lg"
           >
             {loadingMore ? (
               <>
@@ -419,7 +455,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
             ) : (
               <>
                 Load More Videos (200 per channel)
-                <span className="text-sm opacity-75">({videos.length} loaded)</span>
+                <span className="hidden sm:inline text-sm opacity-75 ml-2">({videos.length} loaded)</span>
               </>
             )}
           </button>
