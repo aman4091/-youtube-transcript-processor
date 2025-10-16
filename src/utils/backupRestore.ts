@@ -1,6 +1,7 @@
 import { Settings } from '../stores/settingsStore';
 import { ProcessedLink } from '../stores/historyStore';
 import { QueuedScript } from '../stores/tempQueueStore';
+import { CachedChannelData, exportAllCacheData, importAllCacheData } from './videoCache';
 
 export interface BackupData {
   version: string;
@@ -9,10 +10,11 @@ export interface BackupData {
   history: ProcessedLink[];
   queue: QueuedScript[];
   counter: number;
+  videoCache?: { [channelUrl: string]: CachedChannelData }; // Cache data for all channels
 }
 
 /**
- * Create a backup of all data
+ * Create a backup of all data (including video cache)
  */
 export const createBackup = (
   settings: Settings,
@@ -20,6 +22,8 @@ export const createBackup = (
   queue: QueuedScript[],
   counter: number
 ): BackupData => {
+  const videoCache = exportAllCacheData();
+
   return {
     version: '1.0',
     timestamp: new Date().toISOString(),
@@ -27,6 +31,7 @@ export const createBackup = (
     history,
     queue,
     counter,
+    videoCache, // Include all cached videos
   };
 };
 
@@ -110,7 +115,7 @@ export const restoreSettingsOnly = (
 };
 
 /**
- * Restore full backup (everything)
+ * Restore full backup (everything including video cache)
  */
 export const restoreFullBackup = (backup: BackupData): {
   settings: Settings;
@@ -118,6 +123,11 @@ export const restoreFullBackup = (backup: BackupData): {
   queue: QueuedScript[];
   counter: number;
 } => {
+  // Restore video cache if available
+  if (backup.videoCache) {
+    importAllCacheData(backup.videoCache);
+  }
+
   return {
     settings: backup.settings,
     history: backup.history || [],

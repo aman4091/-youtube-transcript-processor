@@ -210,3 +210,49 @@ export const isNewChannel = (channelUrl: string): boolean => {
   const cached = getCachedVideos(channelUrl);
   return cached.length === 0;
 };
+
+/**
+ * Export all cache data for backup
+ */
+export const exportAllCacheData = (): { [channelUrl: string]: CachedChannelData } => {
+  try {
+    const allCacheData: { [channelUrl: string]: CachedChannelData } = {};
+    const keys = Object.keys(localStorage);
+
+    keys.forEach(key => {
+      if (key.startsWith(CACHE_KEY_PREFIX)) {
+        const cached = localStorage.getItem(key);
+        if (cached) {
+          const data: CachedChannelData = JSON.parse(cached);
+          allCacheData[data.channelUrl] = data;
+        }
+      }
+    });
+
+    console.log(`📤 Exported cache data for ${Object.keys(allCacheData).length} channels`);
+    return allCacheData;
+  } catch (error) {
+    console.error('Error exporting cache data:', error);
+    return {};
+  }
+};
+
+/**
+ * Import all cache data from backup
+ */
+export const importAllCacheData = (cacheData: { [channelUrl: string]: CachedChannelData }): void => {
+  try {
+    let importedCount = 0;
+
+    Object.values(cacheData).forEach(data => {
+      const cacheKey = getCacheKey(data.channelUrl);
+      localStorage.setItem(cacheKey, JSON.stringify(data));
+      updateCacheMetadata(data.channelUrl, data.videos.length);
+      importedCount++;
+    });
+
+    console.log(`📥 Imported cache data for ${importedCount} channels`);
+  } catch (error) {
+    console.error('Error importing cache data:', error);
+  }
+};
