@@ -221,9 +221,8 @@ export default function SideBySideComparison({ transcript, outputs, onSelectFina
             {onRewrite && (
               <button
                 onClick={() => {
-                  if (confirm('Regenerate all outputs with the same transcript? This will re-process with all enabled AI models.')) {
-                    onRewrite();
-                  }
+                  console.log('🔄 Regenerating all outputs with same transcript');
+                  onRewrite();
                 }}
                 className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium text-sm"
               >

@@ -15,9 +15,8 @@ export default function ProcessedVideos({ onVideoSelect, onClose }: ProcessedVid
   });
 
   const handleClearHistory = () => {
-    if (confirm('Are you sure you want to clear all processed video history?')) {
-      clearHistory();
-    }
+    console.log('🗑️ Clearing all processed video history');
+    clearHistory();
   };
 
   const handleVideoClick = (url: string, title?: string) => {

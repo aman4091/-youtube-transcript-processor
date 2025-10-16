@@ -8,6 +8,7 @@ import TranscriptApproval from './components/TranscriptApproval';
 import ProcessedVideos from './components/ProcessedVideos';
 import TitleGenerator from './components/TitleGenerator';
 import TitleConfirmModal from './components/TitleConfirmModal';
+import ManualProcessingModal from './components/ManualProcessingModal';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -76,6 +77,9 @@ function App() {
   const [currentScript, setCurrentScript] = useState('');
   const [currentCounter, setCurrentCounter] = useState(0);
 
+  // Manual processing state
+  const [showManualModal, setShowManualModal] = useState(false);
+
   const { settings } = useSettingsStore();
   const { addProcessedLink, saveOutput } = useHistoryStore();
   const { addToQueue, getQueue, clearQueue, getQueueCount, updateGeneratedTitle } = useTempQueueStore();
@@ -106,7 +110,7 @@ function App() {
     try {
       // Validate API keys
       if (!settings.supaDataApiKey) {
-        alert('Please set SupaData API key in settings');
+        console.error('❌ SupaData API key not configured');
         setProcessingState({ isProcessing: false, status: '' });
         return;
       }
@@ -139,8 +143,7 @@ function App() {
       // Don't process further - wait for user approval
       return;
     } catch (error) {
-      console.error('Processing error:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      console.error('❌ Processing error:', error);
       setProcessingState({ isProcessing: false, status: '' });
     }
   };
@@ -349,8 +352,7 @@ function App() {
         console.log(`\n✓ No pending videos. This was the last or only video.`);
       }
     } catch (error) {
-      console.error('Processing error:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      console.error('❌ Processing error:', error);
       setProcessingState({ isProcessing: false, status: '' });
     }
   };
@@ -366,7 +368,7 @@ function App() {
     console.log('🔄 User rejected transcript, trying another video from same channel...');
 
     if (!currentVideoInfo?.channelTitle) {
-      alert('Cannot find another video - channel information not available');
+      console.error('❌ Cannot find another video - channel information not available');
       return;
     }
 
@@ -389,7 +391,7 @@ function App() {
         console.log('No cached videos, fetching from YouTube API...');
 
         if (!settings.youtubeApiKey || settings.channelUrls.length === 0) {
-          alert('Cannot fetch more videos - YouTube API key or channel URLs not configured');
+          console.error('❌ Cannot fetch more videos - YouTube API key or channel URLs not configured');
           setProcessingState({ isProcessing: false, status: '' });
           return;
         }
@@ -410,7 +412,7 @@ function App() {
         );
 
         if (sameChannelVideos.length === 0) {
-          alert('No more videos found from this channel');
+          console.log('⚠️ No more videos found from this channel');
           setProcessingState({ isProcessing: false, status: '' });
           return;
         }
@@ -448,8 +450,7 @@ function App() {
         );
       }
     } catch (error) {
-      console.error('Error fetching another video:', error);
-      alert(`Failed to fetch another video: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('❌ Error fetching another video:', error);
       setProcessingState({ isProcessing: false, status: '' });
     }
   };
@@ -461,7 +462,73 @@ function App() {
     setCurrentTranscript('');
     setCurrentVideoInfo(null);
     setProcessingState({ isProcessing: false, status: '' });
-    alert('Process canceled');
+  };
+
+  // Handler for manual processing mode
+  const handleManualMode = () => {
+    console.log('✍️ User selected Manual mode');
+    setShowTranscriptApproval(false);
+    setShowManualModal(true);
+  };
+
+  // Handler for manual processing submit
+  const handleManualSubmit = (output: string) => {
+    console.log('✅ User submitted manual output');
+    console.log(`   Output length (before cleaning): ${output.length} characters`);
+
+    if (!currentUrl || !currentVideoInfo) {
+      console.error('No video info available for manual processing');
+      return;
+    }
+
+    // Clean the output - remove markdown formatting (lines, asterisks, etc.)
+    const cleanedOutput = cleanMarkdown(output);
+    console.log(`   Output length (after cleaning): ${cleanedOutput.length} characters`);
+    console.log('✓ Removed markdown formatting (lines, asterisks, etc.)');
+
+    // Close manual modal
+    setShowManualModal(false);
+
+    // Add to history with metadata
+    const videoIdMatch = currentUrl.match(/(?:v=|\/)([\w-]{11})/);
+    const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
+    const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined;
+    addProcessedLink(currentUrl, videoId, currentVideoInfo.title, thumbnailUrl, currentVideoInfo.channelTitle);
+
+    // Save to localStorage history (cleaned version)
+    saveOutput(currentUrl, cleanedOutput);
+    console.log('✓ Saved cleaned output to localStorage history');
+
+    // Get next sequential counter
+    const counter = getNextCounter();
+
+    // Add to queue for Telegram push (cleaned version)
+    addToQueue(
+      cleanedOutput,
+      'Manual',
+      counter,
+      currentVideoInfo.title,
+      currentUrl
+    );
+    console.log(`📝 Added cleaned output to Telegram queue (${getQueueCount()} items total) - Counter: ${counter}`);
+
+    // Store current script and counter for later use (cleaned version)
+    setCurrentScript(cleanedOutput);
+    setCurrentCounter(counter);
+
+    // Clear transcript data
+    setCurrentTranscript('');
+
+    // Show title confirmation modal
+    setShowTitleConfirm(true);
+  };
+
+  // Handler for manual processing cancel
+  const handleManualCancel = () => {
+    console.log('❌ User canceled manual processing');
+    setShowManualModal(false);
+    // Return to transcript approval
+    setShowTranscriptApproval(true);
   };
 
   // Handler for rewriting outputs with same transcript
@@ -640,8 +707,7 @@ function App() {
       console.log(`   Gemini Pro: ${allGeminiPro.length > 0 ? '✓' : '✗'}`);
       console.log(`   OpenRouter: ${allOpenRouter.length > 0 ? '✓' : '✗'}`);
     } catch (error) {
-      console.error('Rewrite error:', error);
-      alert(`Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}`);
+      console.error('❌ Rewrite error:', error);
       setProcessingState({ isProcessing: false, status: '' });
     }
   };
@@ -750,7 +816,7 @@ function App() {
 
     // Check Telegram credentials
     if (!settings.telegramBotToken || !settings.telegramChatId) {
-      alert('⚠️ Telegram not configured!\n\nPlease add your Bot Token and Chat ID #1 in Settings.');
+      console.error('❌ Telegram not configured! Please add your Bot Token and Chat ID #1 in Settings.');
       return;
     }
 
@@ -758,7 +824,7 @@ function App() {
     const queue = getQueue();
 
     if (queue.length === 0) {
-      alert('📭 No scripts in queue to push!');
+      console.log('📭 No scripts in queue to push');
       return;
     }
 
@@ -875,21 +941,21 @@ function App() {
     // Clear processing status
     setProcessingState({ isProcessing: false, status: '' });
 
-    // Show results - NO SUCCESS ALERT, only show errors
+    // Show results - NO SUCCESS ALERT, only log errors
     if (failCount === 0) {
       console.log(`\n✅ All scripts sent successfully!`);
-      // NO ALERT - just clear queue silently
+      // Just clear queue silently
       clearQueue();
       console.log('🗑️ Queue cleared');
     } else if (successCount > 0) {
       console.log(`\n⚠️ Partial success: ${successCount} succeeded, ${failCount} failed`);
       const errorSummary = errors.join('\n');
-      alert(`⚠️ Partial Success\n\nSucceeded: ${successCount}\nFailed: ${failCount}\n\nErrors:\n${errorSummary}`);
+      console.error(`Errors:\n${errorSummary}`);
       // Don't clear queue if some failed
     } else {
       console.log(`\n✗ All scripts failed`);
       const errorSummary = errors.join('\n');
-      alert(`❌ Failed to send scripts\n\n${errorSummary}`);
+      console.error(`Errors:\n${errorSummary}`);
       // Don't clear queue if all failed
     }
   };
@@ -917,6 +983,7 @@ function App() {
           setShowTranscriptApproval(false);
           setShowTitleConfirm(false);
           setShowTitleGenerator(false);
+          setShowManualModal(false);
           setProcessingState({ isProcessing: false, status: '' });
         }}
         onPushToChat={handlePushToChat}
@@ -944,6 +1011,18 @@ function App() {
           onAccept={handleTranscriptAccept}
           onReject={handleTranscriptReject}
           onCancel={handleTranscriptCancel}
+          onManual={handleManualMode}
+        />
+      )}
+
+      {/* Manual Processing Modal */}
+      {showManualModal && currentTranscript && (
+        <ManualProcessingModal
+          transcript={currentTranscript}
+          prompt={settings.customPrompt || 'Summarize the following text:'}
+          videoTitle={currentVideoInfo?.title}
+          onSubmit={handleManualSubmit}
+          onCancel={handleManualCancel}
         />
       )}
 

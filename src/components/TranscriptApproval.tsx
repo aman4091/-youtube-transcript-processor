@@ -1,4 +1,4 @@
-import { FileText, CheckCircle, XCircle, Ban } from 'lucide-react';
+import { FileText, CheckCircle, XCircle, Ban, Edit3 } from 'lucide-react';
 import { formatCharacterCount } from '../utils/characterCounter';
 
 interface TranscriptApprovalProps {
@@ -7,6 +7,7 @@ interface TranscriptApprovalProps {
   onAccept: () => void;
   onReject: () => void;
   onCancel: () => void;
+  onManual: () => void;
 }
 
 export default function TranscriptApproval({
@@ -15,6 +16,7 @@ export default function TranscriptApproval({
   onAccept,
   onReject,
   onCancel,
+  onManual,
 }: TranscriptApprovalProps) {
   const charCount = transcript.length;
 
@@ -58,7 +60,11 @@ export default function TranscriptApproval({
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 md:gap-4 justify-center">
           <button
-            onClick={onAccept}
+            type="button"
+            onClick={() => {
+              console.log('🟢 Accept button clicked - Starting AI processing');
+              onAccept();
+            }}
             className="flex items-center justify-center gap-2 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-semibold text-sm sm:text-base md:text-lg shadow-lg transition-all active:scale-95 sm:hover:scale-105 w-full sm:w-auto"
           >
             <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
@@ -66,7 +72,25 @@ export default function TranscriptApproval({
           </button>
 
           <button
-            onClick={onReject}
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              console.log('🟣 Manual button clicked - Opening manual modal');
+              onManual();
+            }}
+            className="flex items-center justify-center gap-2 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-semibold text-sm sm:text-base md:text-lg shadow-lg transition-all active:scale-95 sm:hover:scale-105 w-full sm:w-auto"
+          >
+            <Edit3 className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
+            <span className="truncate">Manual</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              console.log('🟠 Reject button clicked - Finding another video');
+              onReject();
+            }}
             className="flex items-center justify-center gap-2 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-semibold text-sm sm:text-base md:text-lg shadow-lg transition-all active:scale-95 sm:hover:scale-105 w-full sm:w-auto"
           >
             <XCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />
@@ -74,7 +98,11 @@ export default function TranscriptApproval({
           </button>
 
           <button
-            onClick={onCancel}
+            type="button"
+            onClick={() => {
+              console.log('🔴 Cancel button clicked - Stopping process');
+              onCancel();
+            }}
             className="flex items-center justify-center gap-2 px-4 sm:px-6 md:px-8 py-2.5 sm:py-3 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold text-sm sm:text-base md:text-lg shadow-lg transition-all active:scale-95 sm:hover:scale-105 w-full sm:w-auto"
           >
             <Ban className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6" />

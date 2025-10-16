@@ -1,8 +1,19 @@
-import { useState, useEffect } from 'react';
-import { X, Settings as SettingsIcon, Send, Video, VideoOff, Terminal } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Settings as SettingsIcon, Send, Video, VideoOff, Terminal, Download, Upload, AlertCircle } from 'lucide-react';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useHistoryStore } from '../stores/historyStore';
+import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useScriptCounterStore } from '../stores/scriptCounterStore';
 import { fetchOpenRouterModels } from '../services/aiProcessors';
 import { verifyTelegramCredentials, sendCommand } from '../services/telegramAPI';
+import {
+  createBackup,
+  downloadBackup,
+  readBackupFile,
+  restoreSettingsOnly,
+  restoreFullBackup,
+  BackupData,
+} from '../utils/backupRestore';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -11,6 +22,10 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { settings, updateSettings } = useSettingsStore();
+  const { processedLinks, saveOutput, addProcessedLink, clearHistory } = useHistoryStore();
+  const { queuedScripts, clearQueue, addToQueue } = useTempQueueStore();
+  const { counter, setCounter } = useScriptCounterStore();
+
   const [localSettings, setLocalSettings] = useState(settings);
   const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; name: string }>>([]);
   const [modelSearch, setModelSearch] = useState('');
@@ -23,6 +38,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [isSendingCommand, setIsSendingCommand] = useState(false);
   const [showFFmpegModal, setShowFFmpegModal] = useState(false);
   const [ffmpegCommand, setFFmpegCommand] = useState('');
+
+  // Backup/Restore states
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [restoreType, setRestoreType] = useState<'full' | 'settings-only'>('full');
+  const [pendingBackup, setPendingBackup] = useState<BackupData | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -82,7 +103,7 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleToggleVideo = async () => {
     if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
-      alert('⚠️ Please configure Telegram credentials first!');
+      console.error('❌ Please configure Telegram credentials first');
       return;
     }
 
@@ -100,10 +121,10 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setVideoEnabled(!videoEnabled);
         console.log(`✓ Sent command: ${command}`);
       } else {
-        alert(`❌ Failed to send command: ${result.error}`);
+        console.error(`❌ Failed to send command: ${result.error}`);
       }
     } catch (error) {
-      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSendingCommand(false);
     }
@@ -111,12 +132,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
 
   const handleSendFFmpegCommand = async () => {
     if (!ffmpegCommand.trim()) {
-      alert('⚠️ Please enter an FFmpeg command!');
+      console.log('⚠️ Please enter an FFmpeg command');
       return;
     }
 
     if (!localSettings.telegramBotToken || !localSettings.telegramChatId) {
-      alert('⚠️ Please configure Telegram credentials first!');
+      console.error('❌ Please configure Telegram credentials first');
       return;
     }
 
@@ -131,17 +152,106 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
       );
 
       if (result.success) {
-        console.log(`✓ Sent FFmpeg command: ${command}`);
+        console.log(`✓ FFmpeg command sent successfully: ${command}`);
         setShowFFmpegModal(false);
         setFFmpegCommand('');
-        alert('✅ FFmpeg command sent successfully!');
       } else {
-        alert(`❌ Failed to send command: ${result.error}`);
+        console.error(`❌ Failed to send command: ${result.error}`);
       }
     } catch (error) {
-      alert(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error(`❌ Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSendingCommand(false);
+    }
+  };
+
+  const handleBackup = () => {
+    console.log('📦 Creating backup...');
+    const backup = createBackup(settings, processedLinks, queuedScripts, counter);
+    downloadBackup(backup);
+    console.log('✓ Backup downloaded successfully');
+  };
+
+  const handleRestoreFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      console.log('📥 Reading backup file...');
+      const backup = await readBackupFile(file);
+      console.log('✓ Backup file parsed successfully');
+
+      // Show restore modal for user to choose restore type
+      setPendingBackup(backup);
+      setShowRestoreModal(true);
+    } catch (error) {
+      console.error('❌ Failed to read backup:', error);
+    }
+
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmRestore = () => {
+    if (!pendingBackup) return;
+
+    try {
+      console.log(`🔄 Restoring backup (type: ${restoreType})...`);
+
+      if (restoreType === 'settings-only') {
+        // Restore settings only (no channels, no history)
+        const restoredSettings = restoreSettingsOnly(pendingBackup, settings);
+        updateSettings(restoredSettings);
+        setLocalSettings(restoredSettings);
+        console.log('✓ Settings restored (without channels and history)');
+      } else {
+        // Full restore (everything)
+        const { settings: restoredSettings, history, queue, counter: restoredCounter } = restoreFullBackup(pendingBackup);
+
+        // Update settings
+        updateSettings(restoredSettings);
+        setLocalSettings(restoredSettings);
+        setChannelUrlsText(restoredSettings.channelUrls.join('\n'));
+
+        // Clear and restore history
+        clearHistory();
+        history.forEach(link => {
+          addProcessedLink(link.url, link.videoId, link.title, link.thumbnail, link.channelTitle);
+          if (link.savedOutput) {
+            saveOutput(link.url, link.savedOutput);
+          }
+        });
+
+        // Clear and restore queue
+        clearQueue();
+        queue.forEach(script => {
+          addToQueue(
+            script.content,
+            script.modelName,
+            script.counter,
+            script.videoTitle,
+            script.videoUrl,
+            script.generatedTitle
+          );
+        });
+
+        // Restore counter
+        setCounter(restoredCounter);
+
+        console.log('✓ Full backup restored successfully');
+        console.log(`   Settings: ✓`);
+        console.log(`   History: ${history.length} items`);
+        console.log(`   Queue: ${queue.length} items`);
+        console.log(`   Counter: ${restoredCounter}`);
+      }
+
+      // Close modals
+      setShowRestoreModal(false);
+      setPendingBackup(null);
+    } catch (error) {
+      console.error('❌ Failed to restore backup:', error);
     }
   };
 
@@ -705,6 +815,66 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               </div>
             </div>
           </div>
+
+          {/* Backup & Restore */}
+          <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
+            <h3 className="text-lg font-semibold">Backup & Restore</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Backup all your settings, channels, and history. Restore them on any device.
+            </p>
+
+            <div className="flex gap-3">
+              {/* Backup Button */}
+              <button
+                onClick={handleBackup}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all shadow-lg"
+              >
+                <Download className="w-4 h-4" />
+                Backup All Data
+              </button>
+
+              {/* Restore Button */}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all shadow-lg"
+              >
+                <Upload className="w-4 h-4" />
+                Restore from Backup
+              </button>
+
+              {/* Hidden File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleRestoreFileSelect}
+                className="hidden"
+              />
+            </div>
+
+            {/* Info Box */}
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+              <p className="text-sm text-green-800 dark:text-green-200 font-semibold mb-2">
+                📦 What's Included in Backup:
+              </p>
+              <ul className="text-xs text-green-700 dark:text-green-300 space-y-1 list-disc list-inside ml-2">
+                <li><strong>Settings:</strong> All API keys, prompts, model toggles</li>
+                <li><strong>Channels:</strong> YouTube channel URLs and durations</li>
+                <li><strong>History:</strong> All processed videos with outputs</li>
+                <li><strong>Queue:</strong> Pending scripts in Telegram queue</li>
+                <li><strong>Counter:</strong> Sequential script counter</li>
+              </ul>
+            </div>
+
+            {/* Warning Box */}
+            <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 dark:text-amber-200">
+                <strong>Important:</strong> Backup files contain sensitive data (API keys). Store them securely and don't share publicly.
+              </div>
+            </div>
+          </div>
+
         </div>
 
         <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex justify-end gap-3">
@@ -790,6 +960,126 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
           </div>
         </div>
       )}
+
+      {/* Restore Options Modal */}
+      {showRestoreModal && pendingBackup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Upload className="w-5 h-5 text-blue-600" />
+                <h3 className="text-lg font-bold">Restore Options</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowRestoreModal(false);
+                  setPendingBackup(null);
+                }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                Choose what to restore from your backup:
+              </p>
+
+              {/* Full Restore Option */}
+              <div
+                onClick={() => setRestoreType('full')}
+                className={`p-4 mb-3 border-2 rounded-lg cursor-pointer transition-all ${
+                  restoreType === 'full'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-blue-300'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    checked={restoreType === 'full'}
+                    onChange={() => setRestoreType('full')}
+                    className="mt-1 w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="font-semibold text-sm mb-1">Full Restore</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Restore everything: settings, channels, history, queue, and counter
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Settings Only Option */}
+              <div
+                onClick={() => setRestoreType('settings-only')}
+                className={`p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  restoreType === 'settings-only'
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                    : 'border-gray-300 dark:border-gray-600 hover:border-blue-300'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <input
+                    type="radio"
+                    checked={restoreType === 'settings-only'}
+                    onChange={() => setRestoreType('settings-only')}
+                    className="mt-1 w-4 h-4"
+                  />
+                  <div className="flex-1">
+                    <p className="font-semibold text-sm mb-1">Settings Only</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      Restore only API keys and settings. Keep current channels and history.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Backup Info */}
+              <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-900 rounded-md">
+                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 font-semibold">
+                  Backup Information:
+                </p>
+                <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                  <p>📅 Created: {new Date(pendingBackup.timestamp).toLocaleString()}</p>
+                  <p>📦 Version: {pendingBackup.version}</p>
+                  <p>📝 History: {pendingBackup.history?.length || 0} items</p>
+                  <p>📋 Queue: {pendingBackup.queue?.length || 0} items</p>
+                  <p>🔢 Counter: {pendingBackup.counter || 0}</p>
+                </div>
+              </div>
+
+              {/* Warning */}
+              <div className="mt-4 flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded">
+                <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 dark:text-amber-200">
+                  <strong>Warning:</strong> {restoreType === 'full' ? 'This will replace ALL your current data!' : 'This will replace your API keys and settings!'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowRestoreModal(false);
+                  setPendingBackup(null);
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmRestore}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md font-medium"
+              >
+                Restore Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
