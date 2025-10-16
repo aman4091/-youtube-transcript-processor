@@ -1,4 +1,11 @@
 import axios from 'axios';
+import {
+  getCachedVideos,
+  saveCachedVideos,
+  mergeVideos,
+  isNewChannel,
+  getCachedPageToken,
+} from '../utils/videoCache';
 
 export interface YouTubeVideo {
   videoId: string;
@@ -168,6 +175,92 @@ async function getUploadsPlaylistId(channelId: string, apiKey: string): Promise<
 }
 
 /**
+ * Load more videos from channels (pagination)
+ * Fetches 200 more videos per channel using page tokens
+ */
+export async function loadMoreChannelVideos(
+  channelUrls: string[],
+  apiKey: string,
+  pageTokens: Map<string, string | undefined>,
+  maxResultsPerChannel: number = 200
+): Promise<{
+  videos: YouTubeVideo[];
+  pageTokens: Map<string, string | undefined>;
+  hasMore: boolean
+}> {
+  try {
+    console.log(`📄 Loading ${maxResultsPerChannel} more videos from ${channelUrls.length} channels...`);
+
+    // Fetch from all channels in parallel
+    const results = await Promise.all(
+      channelUrls.map(async (channelUrl) => {
+        try {
+          // Get pageToken for this channel (undefined = start from beginning)
+          const pageToken = pageTokens.get(channelUrl);
+          console.log(`🔑 Using pageToken for ${channelUrl}:`, pageToken ? `"${pageToken.substring(0, 20)}..."` : 'undefined (will fetch from beginning)');
+
+          const result = await fetchChannelVideos(
+            channelUrl,
+            apiKey,
+            pageToken, // undefined means fetch from beginning
+            maxResultsPerChannel,
+            1 // min duration filtering done client-side
+          );
+
+          // Save new videos to cache WITH pageToken
+          const cachedVideos = getCachedVideos(channelUrl);
+          const mergedVideos = mergeVideos(cachedVideos, result.videos);
+          saveCachedVideos(channelUrl, mergedVideos, result.nextPageToken);
+
+          return {
+            channelUrl,
+            videos: result.videos,
+            nextPageToken: result.nextPageToken,
+            hasMore: !!result.nextPageToken
+          };
+        } catch (error) {
+          console.error(`❌ Error loading more from ${channelUrl}:`, error);
+          return {
+            channelUrl,
+            videos: [],
+            nextPageToken: undefined,
+            hasMore: false
+          };
+        }
+      })
+    );
+
+    // Merge all videos
+    const allVideos: YouTubeVideo[] = [];
+    const newPageTokens = new Map<string, string | undefined>();
+    let hasMore = false;
+
+    results.forEach((result) => {
+      allVideos.push(...result.videos);
+      newPageTokens.set(result.channelUrl, result.nextPageToken);
+      if (result.hasMore) {
+        hasMore = true;
+      }
+    });
+
+    // Sort by date (newest first)
+    allVideos.sort((a, b) => {
+      return new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime();
+    });
+
+    console.log(`✓ Loaded ${allVideos.length} more videos (saved to cache)`);
+
+    return {
+      videos: allVideos,
+      pageTokens: newPageTokens,
+      hasMore,
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
  * Fetch videos from multiple YouTube channels and merge them
  */
 export async function fetchMultipleChannelsVideos(
@@ -232,6 +325,129 @@ export async function fetchMultipleChannelsVideos(
 
     return {
       videos: allVideos,
+      pageTokens: newPageTokens,
+      hasMore,
+    };
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
+ * Fetch videos from multiple channels with smart caching
+ * - New channels: Fetches 200 videos initially (one-time heavy load)
+ * - Existing channels: Fetches only 10 latest videos (quick check)
+ * This drastically reduces API quota usage!
+ */
+export async function fetchLatestVideosWithCache(
+  channelUrls: string[],
+  apiKey: string
+): Promise<{
+  videos: YouTubeVideo[];
+  fromCache: number;
+  fromAPI: number;
+  pageTokens: Map<string, string | undefined>;
+  hasMore: boolean;
+}> {
+  try {
+    if (channelUrls.length === 0) {
+      throw new Error('No channel URLs provided');
+    }
+
+    console.log(`🔄 Smart loading from ${channelUrls.length} channels...`);
+
+    let totalFromCache = 0;
+    let totalFromAPI = 0;
+    const newPageTokens = new Map<string, string | undefined>();
+    let hasMore = false;
+
+    // Process each channel
+    const results = await Promise.all(
+      channelUrls.map(async (channelUrl) => {
+        try {
+          // Check if channel is new (no cache)
+          const isNew = isNewChannel(channelUrl);
+
+          if (isNew) {
+            // NEW CHANNEL: Load 200 videos initially
+            console.log(`🆕 New channel detected: ${channelUrl} - Loading 200 videos...`);
+            const result = await fetchChannelVideos(
+              channelUrl,
+              apiKey,
+              undefined, // no page token
+              200, // Fetch 200 videos for new channel
+              1 // min duration = 1 minute (we'll filter later)
+            );
+            totalFromAPI += result.videos.length;
+
+            // Save to cache WITH pageToken
+            saveCachedVideos(channelUrl, result.videos, result.nextPageToken);
+
+            return {
+              channelUrl,
+              videos: result.videos,
+              nextPageToken: result.nextPageToken,
+              fromCache: 0
+            };
+          } else {
+            // EXISTING CHANNEL: Quick check of latest 10 videos
+            console.log(`📦 Existing channel: ${channelUrl} - Checking latest 10 videos...`);
+            const cachedVideos = getCachedVideos(channelUrl);
+            const oldPageToken = getCachedPageToken(channelUrl); // Preserve old pageToken!
+            totalFromCache += cachedVideos.length;
+
+            const result = await fetchChannelVideos(
+              channelUrl,
+              apiKey,
+              undefined, // no page token
+              10, // Only fetch 10 latest videos
+              1 // min duration = 1 minute
+            );
+            totalFromAPI += result.videos.length;
+
+            // Merge cached + new videos (removes duplicates)
+            const mergedVideos = mergeVideos(cachedVideos, result.videos);
+
+            // Save back to cache WITH OLD pageToken (preserve Load More position!)
+            saveCachedVideos(channelUrl, mergedVideos, oldPageToken);
+
+            return {
+              channelUrl,
+              videos: mergedVideos,
+              nextPageToken: oldPageToken, // Return old pageToken, not new one
+              fromCache: cachedVideos.length
+            };
+          }
+        } catch (error) {
+          console.error(`❌ Error fetching from ${channelUrl}:`, error);
+          // On error, return cached videos if available
+          const cachedVideos = getCachedVideos(channelUrl);
+          return {
+            channelUrl,
+            videos: cachedVideos,
+            nextPageToken: undefined,
+            fromCache: cachedVideos.length
+          };
+        }
+      })
+    );
+
+    // Process results
+    const allVideos: YouTubeVideo[] = [];
+    results.forEach((result) => {
+      allVideos.push(...result.videos);
+      newPageTokens.set(result.channelUrl, result.nextPageToken);
+      if (result.nextPageToken) {
+        hasMore = true;
+      }
+    });
+
+    console.log(`✓ Total: ${allVideos.length} videos (${totalFromCache} cached, ${totalFromAPI} new)`);
+
+    return {
+      videos: allVideos,
+      fromCache: totalFromCache,
+      fromAPI: totalFromAPI,
       pageTokens: newPageTokens,
       hasMore,
     };

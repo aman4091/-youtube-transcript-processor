@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Play, CheckCircle, Loader2, Eye, Clock, Send } from 'lucide-react';
-import { fetchMultipleChannelsVideos, YouTubeVideo } from '../services/youtubeAPI';
+import { fetchLatestVideosWithCache, loadMoreChannelVideos, YouTubeVideo } from '../services/youtubeAPI';
+import { getCachedVideos, mergeVideos, getCachedPageToken } from '../utils/videoCache';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
@@ -21,77 +22,136 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string>('');
-  const [pageTokens, setPageTokens] = useState<Map<string, string | undefined>>(new Map());
-  const [hasMoreVideos, setHasMoreVideos] = useState(false);
-  const [totalLoaded, setTotalLoaded] = useState(0);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [selectedChannel, setSelectedChannel] = useState<string>('all');
+  const [cacheStats, setCacheStats] = useState<{ fromCache: number; fromAPI: number }>({ fromCache: 0, fromAPI: 0 });
+  const [pageTokens, setPageTokens] = useState<Map<string, string | undefined>>(new Map());
+  const [hasMoreVideos, setHasMoreVideos] = useState(false);
 
-  const loadVideos = async (append: boolean = false) => {
+  // Load cached videos only (no API call)
+  const loadCachedVideos = () => {
+    if (settings.channelUrls.length === 0) {
+      return;
+    }
+
+    console.log('📦 Loading cached videos only...');
+
+    // Load all cached videos AND pageTokens from all channels
+    const allCachedVideos: YouTubeVideo[] = [];
+    const cachedPageTokens = new Map<string, string | undefined>();
+
+    settings.channelUrls.forEach(channelUrl => {
+      const cached = getCachedVideos(channelUrl);
+      const pageToken = getCachedPageToken(channelUrl);
+
+      console.log(`🔑 Cached pageToken for ${channelUrl}:`, pageToken ? `"${pageToken.substring(0, 20)}..."` : 'undefined');
+
+      allCachedVideos.push(...cached);
+      cachedPageTokens.set(channelUrl, pageToken);
+    });
+
+    // Sort by published date (newest first)
+    allCachedVideos.sort((a, b) =>
+      new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+    );
+
+    setVideos(allCachedVideos);
+    setCacheStats({ fromCache: allCachedVideos.length, fromAPI: 0 });
+
+    // Set cached pageTokens so Load More can continue from where cache left off
+    setPageTokens(cachedPageTokens);
+
+    // Enable Load More button (assume more videos available)
+    setHasMoreVideos(true);
+
+    if (onVideosLoaded) onVideosLoaded(allCachedVideos);
+
+    console.log(`✓ Loaded ${allCachedVideos.length} cached videos with pageTokens`);
+  };
+
+  // Fetch new videos from API and merge with cache
+  const loadVideos = async () => {
     if (!settings.youtubeApiKey || settings.channelUrls.length === 0) {
       setError('Please set YouTube API key and at least one Channel URL in settings');
       return;
     }
 
-    if (append) {
-      setLoadingMore(true);
-    } else {
-      setLoading(true);
-      setPageTokens(new Map()); // Reset tokens on fresh load
-    }
+    setLoading(true);
     setError('');
 
     try {
-      // Calculate minimum duration needed (use the smallest one among all channels, or 1 if none set)
-      const minDurations = settings.channelUrls.map(
-        (url) => settings.channelMinDurations[url] || 1
-      );
-      const minDuration = Math.min(...minDurations, ...minDurations.length > 0 ? minDurations : [1]);
+      console.log('📦 Loading videos with smart caching...');
 
-      const result = await fetchMultipleChannelsVideos(
+      // Use smart cached API - auto-detects new vs existing channels!
+      // New channels: 200 videos, Existing: 10 latest videos
+      const result = await fetchLatestVideosWithCache(
         settings.channelUrls,
-        settings.youtubeApiKey,
-        append ? pageTokens : new Map(),
-        200, // Load 200 videos per page
-        minDuration // Use calculated minimum duration (no hardcoded 27)
-        // Note: Sorting is done client-side in displayVideos
+        settings.youtubeApiKey
       );
 
-      if (append) {
-        const newVideos = [...videos, ...result.videos];
-        setVideos(newVideos);
-        setTotalLoaded((prev) => prev + result.videos.length);
-        if (onVideosLoaded) onVideosLoaded(newVideos);
-      } else {
-        setVideos(result.videos);
-        setTotalLoaded(result.videos.length);
-        if (onVideosLoaded) onVideosLoaded(result.videos);
-      }
-
+      setVideos(result.videos);
+      setCacheStats({ fromCache: result.fromCache, fromAPI: result.fromAPI });
       setPageTokens(result.pageTokens);
       setHasMoreVideos(result.hasMore);
+
+      if (onVideosLoaded) onVideosLoaded(result.videos);
+
+      console.log(`✓ Loaded ${result.videos.length} total videos`);
+      console.log(`  📦 From cache: ${result.fromCache} videos`);
+      console.log(`  🌐 From API: ${result.fromAPI} new videos`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load videos');
-      if (!append) {
-        setVideos([]);
-      }
+      setVideos([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreVideos = async () => {
+    if (!settings.youtubeApiKey || settings.channelUrls.length === 0) {
+      return;
+    }
+
+    if (!hasMoreVideos || loadingMore) {
+      return;
+    }
+
+    setLoadingMore(true);
+
+    try {
+      console.log('📄 Loading more videos from cached position...');
+
+      const result = await loadMoreChannelVideos(
+        settings.channelUrls,
+        settings.youtubeApiKey,
+        pageTokens, // Use pageTokens from cache (already set in loadCachedVideos)
+        200 // Load 200 more videos
+      );
+
+      // Merge with existing videos (removes duplicates by videoId)
+      const mergedVideos = mergeVideos(videos, result.videos);
+      setVideos(mergedVideos);
+      setPageTokens(result.pageTokens);
+      setHasMoreVideos(result.hasMore);
+
+      if (onVideosLoaded) onVideosLoaded(mergedVideos);
+
+      const newVideosCount = mergedVideos.length - videos.length;
+      console.log(`✓ Loaded ${newVideosCount} new unique videos (total: ${mergedVideos.length})`);
+    } catch (err) {
+      console.error('Error loading more videos:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load more videos');
+    } finally {
       setLoadingMore(false);
     }
   };
 
-  const handleLoadMore = () => {
-    if (hasMoreVideos && !loadingMore) {
-      loadVideos(true);
-    }
-  };
-
+  // Load cached videos on mount (no API call)
   useEffect(() => {
-    if (settings.youtubeApiKey && settings.channelUrls.length > 0) {
-      loadVideos();
+    if (settings.channelUrls.length > 0) {
+      loadCachedVideos();
     }
-  }, [settings.youtubeApiKey, JSON.stringify(settings.channelUrls)]);
+  }, [JSON.stringify(settings.channelUrls)]);
 
 
   const handleVideoClick = (video: YouTubeVideo) => {
@@ -116,7 +176,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
   const handleProcessSelected = () => {
     if (selectedVideos.size === 0) {
-      alert('Please select at least one video');
+      console.log('⚠️ Please select at least one video');
       return;
     }
 
@@ -172,6 +232,11 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   // Filter and sort videos
   const displayVideos = videos
     .filter(video => {
+      // Hide processed videos from homepage (only show in history)
+      if (isProcessed(video.videoId)) {
+        return false;
+      }
+
       // Channel filter
       if (selectedChannel !== 'all' && video.channelTitle !== selectedChannel) {
         return false;
@@ -261,7 +326,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
               })()}
             </h2>
             <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 break-words">
-              {settings.channelUrls.length} channel(s) • Showing {displayVideos.length} of {totalLoaded} videos
+              {settings.channelUrls.length} channel(s) • {videos.length} total videos ({cacheStats.fromCache} cached, {cacheStats.fromAPI} new) • Showing {displayVideos.length} unprocessed
               {selectedVideos.size > 0 && ` • ${selectedVideos.size} selected`}
             </p>
           </div>
@@ -272,7 +337,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
               onChange={(e) => setSelectedChannel(e.target.value)}
               className="px-3 sm:px-4 py-2 rounded-lg border-2 border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:border-blue-500 dark:hover:border-blue-400 transition-colors font-medium text-xs sm:text-sm cursor-pointer"
             >
-              <option value="all">All Channels ({totalLoaded})</option>
+              <option value="all">All Channels ({videos.length})</option>
               {uniqueChannels.map((channel) => {
                 const count = videos.filter(v => v.channelTitle === channel).length;
                 return (
@@ -342,7 +407,7 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
       {videos.length > 0 && hasMoreVideos && (
         <div className="flex items-center justify-center mb-6">
           <button
-            onClick={handleLoadMore}
+            onClick={loadMoreVideos}
             disabled={loadingMore}
             className="flex items-center gap-2 px-8 py-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium text-lg shadow-lg"
           >
@@ -353,8 +418,8 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
               </>
             ) : (
               <>
-                Load More Videos
-                <span className="text-sm opacity-75">({totalLoaded} loaded)</span>
+                Load More Videos (200 per channel)
+                <span className="text-sm opacity-75">({videos.length} loaded)</span>
               </>
             )}
           </button>
@@ -442,10 +507,12 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
         })}
       </div>
 
-      {/* No more videos message */}
-      {videos.length > 0 && !hasMoreVideos && !loading && (
+      {/* Cache info */}
+      {videos.length > 0 && !loading && (
         <div className="text-center mt-8 text-gray-600 dark:text-gray-400">
-          <p className="text-lg font-medium">All videos loaded from {settings.channelUrls.length} channel(s)! ({totalLoaded} total)</p>
+          <p className="text-sm">
+            💾 Smart caching enabled • New channels: 200 videos • Existing channels: 10 latest • Drastically reduced API usage
+          </p>
         </div>
       )}
     </div>
