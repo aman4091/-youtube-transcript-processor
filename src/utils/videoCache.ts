@@ -2,12 +2,15 @@ import { YouTubeVideo } from '../services/youtubeAPI';
 
 const CACHE_KEY_PREFIX = 'youtube_videos_cache_';
 const CACHE_METADATA_KEY = 'youtube_cache_metadata';
+const CACHE_VERSION = 2; // Increment when YouTubeVideo interface changes
+const CACHE_VERSION_KEY = 'youtube_cache_version';
 
 export interface CachedChannelData {
   channelUrl: string;
   videos: YouTubeVideo[];
   lastUpdated: string;
   pageToken?: string; // Track where to fetch next
+  version?: number; // Cache version for migration
 }
 
 export interface CacheMetadata {
@@ -25,10 +28,32 @@ const getCacheKey = (channelUrl: string): string => {
 };
 
 /**
+ * Check if cache version is outdated and clear if needed
+ */
+const checkAndClearOldCache = (): void => {
+  try {
+    const storedVersion = localStorage.getItem(CACHE_VERSION_KEY);
+    const currentVersion = CACHE_VERSION.toString();
+
+    if (storedVersion !== currentVersion) {
+      console.log(`🔄 Cache version mismatch (stored: ${storedVersion}, current: ${currentVersion}). Clearing old cache...`);
+      clearAllVideoCache();
+      localStorage.setItem(CACHE_VERSION_KEY, currentVersion);
+      console.log('✓ Cache cleared and version updated');
+    }
+  } catch (error) {
+    console.error('Error checking cache version:', error);
+  }
+};
+
+/**
  * Get cached videos for a specific channel
  */
 export const getCachedVideos = (channelUrl: string): YouTubeVideo[] => {
   try {
+    // Check cache version first
+    checkAndClearOldCache();
+
     const cacheKey = getCacheKey(channelUrl);
     const cached = localStorage.getItem(cacheKey);
 
@@ -38,7 +63,15 @@ export const getCachedVideos = (channelUrl: string): YouTubeVideo[] => {
     }
 
     const data: CachedChannelData = JSON.parse(cached);
-    console.log(`✓ Loaded ${data.videos.length} cached videos for ${channelUrl}`);
+
+    // Double-check: if cached data doesn't have version, it's old
+    if (!data.version || data.version < CACHE_VERSION) {
+      console.log(`🗑️ Cached data for ${channelUrl} is outdated (v${data.version || 0} < v${CACHE_VERSION}). Clearing...`);
+      clearChannelCache(channelUrl);
+      return [];
+    }
+
+    console.log(`✓ Loaded ${data.videos.length} cached videos for ${channelUrl} (v${data.version})`);
     return data.videos;
   } catch (error) {
     console.error('Error reading cache:', error);
@@ -57,6 +90,7 @@ export const saveCachedVideos = (channelUrl: string, videos: YouTubeVideo[], pag
       videos,
       lastUpdated: new Date().toISOString(),
       pageToken,
+      version: CACHE_VERSION, // Include version for migration
     };
 
     localStorage.setItem(cacheKey, JSON.stringify(data));
@@ -64,7 +98,7 @@ export const saveCachedVideos = (channelUrl: string, videos: YouTubeVideo[], pag
     // Update metadata
     updateCacheMetadata(channelUrl, videos.length);
 
-    console.log(`💾 Saved ${videos.length} videos to cache for ${channelUrl}${pageToken ? ' (with pageToken)' : ''}`);
+    console.log(`💾 Saved ${videos.length} videos to cache for ${channelUrl} (v${CACHE_VERSION})${pageToken ? ' (with pageToken)' : ''}`);
   } catch (error) {
     console.error('Error saving to cache:', error);
   }
@@ -245,13 +279,22 @@ export const importAllCacheData = (cacheData: { [channelUrl: string]: CachedChan
     let importedCount = 0;
 
     Object.values(cacheData).forEach(data => {
+      // Update version to current version when importing
+      const updatedData = {
+        ...data,
+        version: CACHE_VERSION,
+      };
+
       const cacheKey = getCacheKey(data.channelUrl);
-      localStorage.setItem(cacheKey, JSON.stringify(data));
+      localStorage.setItem(cacheKey, JSON.stringify(updatedData));
       updateCacheMetadata(data.channelUrl, data.videos.length);
       importedCount++;
     });
 
-    console.log(`📥 Imported cache data for ${importedCount} channels`);
+    // Set current cache version
+    localStorage.setItem(CACHE_VERSION_KEY, CACHE_VERSION.toString());
+
+    console.log(`📥 Imported cache data for ${importedCount} channels (upgraded to v${CACHE_VERSION})`);
   } catch (error) {
     console.error('Error importing cache data:', error);
   }
