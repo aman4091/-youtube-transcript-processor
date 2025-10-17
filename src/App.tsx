@@ -56,7 +56,13 @@ function App() {
   });
   const [results, setResults] = useState<Results | null>(null);
   const [currentUrl, setCurrentUrl] = useState('');
-  const [pendingVideos, setPendingVideos] = useState<Array<{ url: string; title: string }>>([]);
+  const [pendingVideos, setPendingVideos] = useState<Array<{
+    url: string;
+    title: string;
+    channelTitle?: string;
+    targetChannelId?: string;
+    targetChannelName?: string;
+  }>>([]);
   const [isWaitingForUserAction, setIsWaitingForUserAction] = useState(false);
 
   // New states for transcript approval
@@ -68,6 +74,8 @@ function App() {
     channelTitle?: string;
     videoIndex?: number;
     totalVideos?: number;
+    targetChannelId?: string;
+    targetChannelName?: string;
   } | null>(null);
   const [availableVideos, setAvailableVideos] = useState<YouTubeVideo[]>([]);
 
@@ -90,7 +98,9 @@ function App() {
     videoTitle?: string,
     videoIndex?: number,
     totalVideos?: number,
-    channelTitle?: string
+    channelTitle?: string,
+    targetChannelId?: string,
+    targetChannelName?: string
   ) => {
     console.log('═'.repeat(60));
     console.log(`🎬 Starting video processing ${videoIndex ? `[${videoIndex}/${totalVideos}]` : ''}`);
@@ -133,6 +143,8 @@ function App() {
         channelTitle,
         videoIndex,
         totalVideos,
+        targetChannelId,
+        targetChannelName,
       });
 
       // Show transcript approval UI
@@ -174,7 +186,11 @@ function App() {
       const videoIdMatch = url.match(/(?:v=|\/)([\w-]{11})/);
       const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
       const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined;
-      addProcessedLink(url, videoId, videoTitle, thumbnailUrl, currentVideoInfo?.channelTitle);
+
+      // Add to history with target channel info
+      const targetChannelId = currentVideoInfo?.targetChannelId || 'default';
+      const targetChannelName = currentVideoInfo?.targetChannelName || 'Default Channel';
+      addProcessedLink(url, targetChannelId, targetChannelName, videoId, videoTitle, thumbnailUrl, currentVideoInfo?.channelTitle);
 
       // Chunk the transcript
       console.log('✂️ Splitting transcript into chunks...');
@@ -430,7 +446,9 @@ function App() {
           randomVideo.title,
           currentVideoInfo.videoIndex,
           currentVideoInfo.totalVideos,
-          randomVideo.channelTitle
+          randomVideo.channelTitle,
+          currentVideoInfo.targetChannelId,
+          currentVideoInfo.targetChannelName
         );
       } else {
         // Pick a random video from cached ones
@@ -446,7 +464,9 @@ function App() {
           randomVideo.title,
           currentVideoInfo.videoIndex,
           currentVideoInfo.totalVideos,
-          randomVideo.channelTitle
+          randomVideo.channelTitle,
+          currentVideoInfo.targetChannelId,
+          currentVideoInfo.targetChannelName
         );
       }
     } catch (error) {
@@ -489,14 +509,17 @@ function App() {
     // Close manual modal
     setShowManualModal(false);
 
-    // Add to history with metadata
+    // Add to history with metadata and target channel
     const videoIdMatch = currentUrl.match(/(?:v=|\/)([\w-]{11})/);
     const videoId = videoIdMatch ? videoIdMatch[1] : undefined;
     const thumbnailUrl = videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : undefined;
-    addProcessedLink(currentUrl, videoId, currentVideoInfo.title, thumbnailUrl, currentVideoInfo.channelTitle);
+
+    const targetChannelId = currentVideoInfo.targetChannelId || 'default';
+    const targetChannelName = currentVideoInfo.targetChannelName || 'Default Channel';
+    addProcessedLink(currentUrl, targetChannelId, targetChannelName, videoId, currentVideoInfo.title, thumbnailUrl, currentVideoInfo.channelTitle);
 
     // Save to localStorage history (cleaned version)
-    saveOutput(currentUrl, cleanedOutput);
+    saveOutput(currentUrl, targetChannelId, cleanedOutput);
     console.log('✓ Saved cleaned output to localStorage history');
 
     // Get next sequential counter
@@ -715,9 +738,10 @@ function App() {
   const handleSelectFinal = async (output: string, modelName: string) => {
     console.log(`\n💾 User selected ${modelName} as final output`);
 
-    if (currentUrl) {
-      // Save to localStorage history
-      saveOutput(currentUrl, output);
+    if (currentUrl && currentVideoInfo) {
+      // Save to localStorage history with target channel
+      const targetChannelId = currentVideoInfo.targetChannelId || 'default';
+      saveOutput(currentUrl, targetChannelId, output);
       console.log('✓ Saved to localStorage history');
 
       // Get next sequential counter
@@ -777,7 +801,15 @@ function App() {
       console.log(`📋 Remaining videos in queue: ${remainingVideos.length}`);
 
       // Process next video
-      await handleProcess(nextVideo.url, nextVideo.title, currentIndex, totalVideosOriginal);
+      await handleProcess(
+        nextVideo.url,
+        nextVideo.title,
+        currentIndex,
+        totalVideosOriginal,
+        nextVideo.channelTitle,
+        nextVideo.targetChannelId,
+        nextVideo.targetChannelName
+      );
     } else {
       console.log('\n🎉 All videos processed successfully!');
     }

@@ -1,6 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+export interface TargetChannel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface Settings {
   supaDataApiKey: string;
   deepSeekApiKey: string;
@@ -24,6 +30,8 @@ export interface Settings {
   videoSortOrder: 'date' | 'popular';
   // Channel-specific min duration (in minutes) - key: channel URL, value: min duration
   channelMinDurations: Record<string, number>;
+  // Target channels (user's own channels where videos will be published)
+  targetChannels: TargetChannel[];
 }
 
 interface SettingsStore {
@@ -55,6 +63,8 @@ const defaultSettings: Settings = {
   videoSortOrder: 'popular',
   // Channel min durations - default 27 minutes for all
   channelMinDurations: {},
+  // Target channels - empty by default
+  targetChannels: [],
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -76,7 +86,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'youtube-processor-settings',
-      version: 8,
+      version: 9,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating settings from version ${version}`);
         // Migrate old channelUrl (string) to channelUrls (array)
@@ -124,6 +134,10 @@ export const useSettingsStore = create<SettingsStore>()(
         // Migrate to version 8 - add channel min durations
         if (version < 8) {
           persistedState.settings.channelMinDurations = persistedState.settings.channelMinDurations || {};
+        }
+        // Migrate to version 9 - add target channels
+        if (version < 9) {
+          persistedState.settings.targetChannels = persistedState.settings.targetChannels || [];
         }
         console.log('✓ Settings migrated successfully');
         return persistedState;

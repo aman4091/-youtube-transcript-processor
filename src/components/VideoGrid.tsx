@@ -5,10 +5,17 @@ import { getCachedVideos, mergeVideos, getCachedPageToken } from '../utils/video
 import { useSettingsStore } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
+import { TargetChannelSelectModal } from './TargetChannelSelectModal';
 
 interface VideoGridProps {
-  onVideoSelect: (videoUrl: string, videoTitle?: string, videoIndex?: number, totalVideos?: number, channelTitle?: string) => void;
-  onBatchSelect?: (videos: Array<{ url: string; title: string }>) => void;
+  onVideoSelect: (videoUrl: string, videoTitle?: string, videoIndex?: number, totalVideos?: number, channelTitle?: string, targetChannelId?: string, targetChannelName?: string) => void;
+  onBatchSelect?: (videos: Array<{
+    url: string;
+    title: string;
+    channelTitle?: string;
+    targetChannelId?: string;
+    targetChannelName?: string;
+  }>) => void;
   onVideosLoaded?: (videos: YouTubeVideo[]) => void;
   onPushToChat?: () => void;
 }
@@ -28,6 +35,11 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
   const [pageTokens, setPageTokens] = useState<Map<string, string | undefined>>(new Map());
   const [hasMoreVideos, setHasMoreVideos] = useState(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // Target Channel Selection
+  const [showTargetChannelModal, setShowTargetChannelModal] = useState(false);
+  const [pendingVideo, setPendingVideo] = useState<YouTubeVideo | null>(null);
+  const [pendingBatchVideos, setPendingBatchVideos] = useState<YouTubeVideo[]>([]);
 
   // Load cached videos only (no API call)
   const loadCachedVideos = () => {
@@ -156,8 +168,63 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
 
   const handleVideoClick = (video: YouTubeVideo) => {
-    const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
-    onVideoSelect(videoUrl, video.title, undefined, undefined, video.channelTitle);
+    // Check if target channels are configured
+    if (settings.targetChannels.length === 0) {
+      // No target channels configured, process without selecting
+      const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+      onVideoSelect(videoUrl, video.title, undefined, undefined, video.channelTitle);
+      return;
+    }
+
+    // Show target channel selection modal
+    setPendingVideo(video);
+    setShowTargetChannelModal(true);
+  };
+
+  const handleTargetChannelSelect = (targetChannelId: string, targetChannelName: string) => {
+    if (!pendingVideo) return;
+
+    const videoUrl = `https://www.youtube.com/watch?v=${pendingVideo.videoId}`;
+
+    // Check if this is batch processing
+    if (pendingBatchVideos.length > 0) {
+      // Prepare remaining videos for batch with selected target channel
+      const remainingVideos = pendingBatchVideos.map(video => ({
+        url: `https://www.youtube.com/watch?v=${video.videoId}`,
+        title: video.title,
+        channelTitle: video.channelTitle,
+        targetChannelId: targetChannelId,
+        targetChannelName: targetChannelName,
+      }));
+
+      // Send remaining videos to parent if callback exists
+      if (onBatchSelect && remainingVideos.length > 0) {
+        onBatchSelect(remainingVideos);
+      }
+
+      // Clear selection
+      setSelectedVideos(new Set());
+
+      // Process first video with selected target channel
+      onVideoSelect(
+        videoUrl,
+        pendingVideo.title,
+        1,
+        pendingBatchVideos.length + 1,
+        pendingVideo.channelTitle,
+        targetChannelId,
+        targetChannelName
+      );
+
+      // Clear batch
+      setPendingBatchVideos([]);
+    } else {
+      // Single video processing
+      onVideoSelect(videoUrl, pendingVideo.title, undefined, undefined, pendingVideo.channelTitle, targetChannelId, targetChannelName);
+    }
+
+    // Clear pending video
+    setPendingVideo(null);
   };
 
   const isProcessed = (videoId: string): boolean => {
@@ -184,8 +251,16 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     // Get selected video objects (already sorted by API based on settings.videoSortOrder)
     const videosToProcess = videos.filter(v => selectedVideos.has(v.videoId));
 
-    // Process videos sequentially
-    processVideosSequentially(videosToProcess);
+    // Check if target channels are configured
+    if (settings.targetChannels.length === 0) {
+      // No target channels, process directly
+      processVideosSequentially(videosToProcess);
+    } else {
+      // Show modal for first video, store rest as pending batch
+      setPendingBatchVideos(videosToProcess.slice(1));
+      setPendingVideo(videosToProcess[0]);
+      setShowTargetChannelModal(true);
+    }
   };
 
   const processVideosSequentially = async (videosToProcess: YouTubeVideo[]) => {
@@ -196,9 +271,13 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     const firstVideoUrl = `https://www.youtube.com/watch?v=${firstVideo.videoId}`;
 
     // Prepare remaining videos for batch
+    const firstTargetChannel = settings.targetChannels[0];
     const remainingVideos = videosToProcess.slice(1).map(video => ({
       url: `https://www.youtube.com/watch?v=${video.videoId}`,
       title: video.title,
+      channelTitle: video.channelTitle,
+      targetChannelId: firstTargetChannel?.id,
+      targetChannelName: firstTargetChannel?.name,
     }));
 
     // Send remaining videos to parent if callback exists
@@ -209,9 +288,19 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
     // Clear selection
     setSelectedVideos(new Set());
 
-    // Process first video
+    // Process first video (for batch, we'll use first target channel or skip target selection)
     console.log(`Processing video 1 of ${videosToProcess.length}: ${firstVideo.title}`);
-    await onVideoSelect(firstVideoUrl, firstVideo.title, 1, videosToProcess.length, firstVideo.channelTitle);
+
+    // For batch processing, use first target channel if available, otherwise process without
+    await onVideoSelect(
+      firstVideoUrl,
+      firstVideo.title,
+      1,
+      videosToProcess.length,
+      firstVideo.channelTitle,
+      firstTargetChannel?.id,
+      firstTargetChannel?.name
+    );
   };
 
   // Get unique channel names
@@ -255,13 +344,23 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
       }
 
       // Duration filter based on channel-specific settings
-      // Get min duration for this video's channel by matching channel title
-      const matchingChannelUrl = Object.keys(settings.channelMinDurations).find(
-        url => url.includes(video.channelTitle)
-      );
-      const minDurationForChannel = matchingChannelUrl
-        ? settings.channelMinDurations[matchingChannelUrl]
-        : 1; // Default to 1 minute if not configured (no hardcoded 27)
+      // Get min duration for this video's channel by finding matching URL
+      // Match by checking if channel URL contains the video's channelId or if channelTitle matches
+      let minDurationForChannel = 1; // Default to 1 minute
+
+      for (const [channelUrl, minDuration] of Object.entries(settings.channelMinDurations)) {
+        // Try to match by channelId first (more reliable)
+        if (video.channelId && channelUrl.includes(video.channelId)) {
+          minDurationForChannel = minDuration;
+          break;
+        }
+        // Fallback: match by channel title (case-insensitive)
+        if (channelUrl.toLowerCase().includes(video.channelTitle.toLowerCase()) ||
+            video.channelTitle.toLowerCase().includes(channelUrl.toLowerCase())) {
+          minDurationForChannel = minDuration;
+          break;
+        }
+      }
 
       const videoDurationMinutes = parseDuration(video.duration);
       return videoDurationMinutes >= minDurationForChannel;
@@ -550,6 +649,20 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
             💾 Smart caching enabled • New channels: 200 videos • Existing channels: 10 latest • Drastically reduced API usage
           </p>
         </div>
+      )}
+
+      {/* Target Channel Selection Modal */}
+      {pendingVideo && (
+        <TargetChannelSelectModal
+          isOpen={showTargetChannelModal}
+          onClose={() => {
+            setShowTargetChannelModal(false);
+            setPendingVideo(null);
+          }}
+          videoUrl={`https://www.youtube.com/watch?v=${pendingVideo.videoId}`}
+          videoTitle={pendingVideo.title}
+          onSelectChannel={handleTargetChannelSelect}
+        />
       )}
     </div>
   );

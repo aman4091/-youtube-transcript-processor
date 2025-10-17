@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Settings as SettingsIcon, Send, Video, VideoOff, Terminal, Download, Upload, AlertCircle } from 'lucide-react';
-import { useSettingsStore } from '../stores/settingsStore';
+import { X, Settings as SettingsIcon, Send, Video, VideoOff, Terminal, Download, Upload, AlertCircle, Plus, Trash2, Edit3 } from 'lucide-react';
+import { useSettingsStore, TargetChannel } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
@@ -44,6 +44,12 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const [restoreType, setRestoreType] = useState<'full' | 'settings-only'>('full');
   const [pendingBackup, setPendingBackup] = useState<BackupData | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Target Channel states
+  const [showAddChannelModal, setShowAddChannelModal] = useState(false);
+  const [editingChannelId, setEditingChannelId] = useState<string | null>(null);
+  const [channelName, setChannelName] = useState('');
+  const [channelDescription, setChannelDescription] = useState('');
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -255,6 +261,50 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
     }
   };
 
+  // Target Channel handlers
+  const handleAddOrEditChannel = () => {
+    if (!channelName.trim()) return;
+
+    if (editingChannelId) {
+      // Edit existing channel
+      const updatedChannels = localSettings.targetChannels.map((ch) =>
+        ch.id === editingChannelId
+          ? { ...ch, name: channelName.trim(), description: channelDescription.trim() }
+          : ch
+      );
+      setLocalSettings({ ...localSettings, targetChannels: updatedChannels });
+    } else {
+      // Add new channel
+      const newChannel: TargetChannel = {
+        id: `channel_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        name: channelName.trim(),
+        description: channelDescription.trim(),
+      };
+      setLocalSettings({
+        ...localSettings,
+        targetChannels: [...localSettings.targetChannels, newChannel],
+      });
+    }
+
+    // Reset form
+    setShowAddChannelModal(false);
+    setEditingChannelId(null);
+    setChannelName('');
+    setChannelDescription('');
+  };
+
+  const handleEditChannel = (channel: TargetChannel) => {
+    setEditingChannelId(channel.id);
+    setChannelName(channel.name);
+    setChannelDescription(channel.description || '');
+    setShowAddChannelModal(true);
+  };
+
+  const handleDeleteChannel = (channelId: string) => {
+    const updatedChannels = localSettings.targetChannels.filter((ch) => ch.id !== channelId);
+    setLocalSettings({ ...localSettings, targetChannels: updatedChannels });
+  };
+
   const filteredModels = openRouterModels.filter(
     (model) =>
       model.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
@@ -451,6 +501,71 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                   Set minimum video duration for each channel (format: HH:MM:SS, e.g., 00:27:00 for 27 minutes). Videos shorter than this will not appear in the grid.
                 </p>
+              </div>
+            )}
+          </div>
+
+          {/* Target Channels (Your Own Channels) */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Target Channels</h3>
+              <button
+                onClick={() => {
+                  setEditingChannelId(null);
+                  setChannelName('');
+                  setChannelDescription('');
+                  setShowAddChannelModal(true);
+                }}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm transition-colors"
+              >
+                <Plus size={16} />
+                Add Channel
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Configure your own YouTube channels where processed videos will be published. You can process the same video for multiple target channels.
+            </p>
+
+            {localSettings.targetChannels.length === 0 ? (
+              <div className="text-center py-8 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+                <p className="text-gray-500 dark:text-gray-400 mb-2">No target channels configured</p>
+                <p className="text-sm text-gray-400 dark:text-gray-500">Add your first target channel to get started</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {localSettings.targetChannels.map((channel) => (
+                  <div
+                    key={channel.id}
+                    className="flex items-start justify-between p-4 border border-gray-300 dark:border-gray-600 rounded-lg hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-base font-semibold text-gray-900 dark:text-white mb-1">
+                        {channel.name}
+                      </h4>
+                      {channel.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400">
+                          {channel.description}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+                      <button
+                        onClick={() => handleEditChannel(channel)}
+                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="Edit"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteChannel(channel.id)}
+                        className="p-2 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
@@ -860,11 +975,11 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
               <ul className="text-xs text-green-700 dark:text-green-300 space-y-1 list-disc list-inside ml-2">
                 <li><strong>Settings:</strong> All API keys, prompts, model toggles</li>
                 <li><strong>Channels:</strong> YouTube channel URLs and durations</li>
+                <li><strong>Target Channels:</strong> Your own channels for publishing</li>
                 <li><strong>History:</strong> All processed videos with outputs</li>
                 <li><strong>Queue:</strong> Pending scripts in Telegram queue</li>
                 <li><strong>Counter:</strong> Sequential script counter</li>
-              </ul>
-            </div>
+              </ul>            </div>
 
             {/* Warning Box */}
             <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 rounded">
@@ -955,6 +1070,88 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
                 }`}
               >
                 {isSendingCommand ? 'Sending...' : 'Send Command'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Target Channel Modal */}
+      {showAddChannelModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full">
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+              <h3 className="text-lg font-bold">
+                {editingChannelId ? 'Edit Target Channel' : 'Add Target Channel'}
+              </h3>
+              <button
+                onClick={() => {
+                  setShowAddChannelModal(false);
+                  setEditingChannelId(null);
+                  setChannelName('');
+                  setChannelDescription('');
+                }}
+                className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Channel Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={channelName}
+                  onChange={(e) => setChannelName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && channelName.trim()) {
+                      handleAddOrEditChannel();
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g., My Tech Channel"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={channelDescription}
+                  onChange={(e) => setChannelDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[80px] resize-y"
+                  placeholder="Add a description to help identify this channel..."
+                />
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowAddChannelModal(false);
+                  setEditingChannelId(null);
+                  setChannelName('');
+                  setChannelDescription('');
+                }}
+                className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleAddOrEditChannel}
+                disabled={!channelName.trim()}
+                className={`px-4 py-2 rounded-md font-medium transition-colors ${
+                  !channelName.trim()
+                    ? 'bg-gray-400 dark:bg-gray-600 text-gray-200 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              >
+                {editingChannelId ? 'Update' : 'Add'} Channel
               </button>
             </div>
           </div>
