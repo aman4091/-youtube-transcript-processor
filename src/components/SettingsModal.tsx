@@ -22,7 +22,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
   const { settings, updateSettings } = useSettingsStore();
-  const { processedLinks, saveOutput, addProcessedLink, clearHistory } = useHistoryStore();
+  const { processedLinks, restoreHistory } = useHistoryStore();
   const { queuedScripts, clearQueue, addToQueue } = useTempQueueStore();
   const { counter, setCounter } = useScriptCounterStore();
 
@@ -221,14 +221,8 @@ export default function SettingsModal({ isOpen, onClose }: SettingsModalProps) {
         setLocalSettings(restoredSettings);
         setChannelUrlsText(restoredSettings.channelUrls.join('\n'));
 
-        // Clear and restore history
-        clearHistory();
-        history.forEach(link => {
-          addProcessedLink(link.url, link.videoId, link.title, link.thumbnail, link.channelTitle);
-          if (link.savedOutput) {
-            saveOutput(link.url, link.savedOutput);
-          }
-        });
+        // Restore history directly (new structure with targetChannelProcessings)
+        restoreHistory(history);
 
         // Clear and restore queue
         clearQueue();

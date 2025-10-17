@@ -345,25 +345,28 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
       // Duration filter based on channel-specific settings
       // Get min duration for this video's channel by finding matching URL
-      // Match by checking if channel URL contains the video's channelId or if channelTitle matches
+      // Match by checking if channel URL contains the video's channelId
       let minDurationForChannel = 1; // Default to 1 minute
+      let matchedChannel = false;
 
       for (const [channelUrl, minDuration] of Object.entries(settings.channelMinDurations)) {
-        // Try to match by channelId first (more reliable)
+        // Match by channelId (most reliable)
         if (video.channelId && channelUrl.includes(video.channelId)) {
           minDurationForChannel = minDuration;
-          break;
-        }
-        // Fallback: match by channel title (case-insensitive)
-        if (channelUrl.toLowerCase().includes(video.channelTitle.toLowerCase()) ||
-            video.channelTitle.toLowerCase().includes(channelUrl.toLowerCase())) {
-          minDurationForChannel = minDuration;
+          matchedChannel = true;
           break;
         }
       }
 
       const videoDurationMinutes = parseDuration(video.duration);
-      return videoDurationMinutes >= minDurationForChannel;
+      const passesFilter = videoDurationMinutes >= minDurationForChannel;
+
+      // Debug logging for filtered out videos
+      if (!passesFilter && matchedChannel) {
+        console.log(`⏱️ Filtered out: "${video.title}" (${video.duration} = ${videoDurationMinutes.toFixed(1)} min < ${minDurationForChannel} min required)`);
+      }
+
+      return passesFilter;
     })
     .sort((a, b) => {
       if (settings.videoSortOrder === 'popular') {

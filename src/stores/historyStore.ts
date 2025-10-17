@@ -35,6 +35,7 @@ interface HistoryStore {
   removeVideoCompletely: (url: string) => void;
   getProcessingsForVideo: (url: string) => TargetChannelProcessing[];
   getAllProcessedVideosForChannel: (targetChannelId: string) => ProcessedLink[];
+  restoreHistory: (links: ProcessedLink[]) => void;
 }
 
 export const useHistoryStore = create<HistoryStore>()(
@@ -166,6 +167,8 @@ export const useHistoryStore = create<HistoryStore>()(
       },
 
       clearHistory: () => set({ processedLinks: [] }),
+
+      restoreHistory: (links) => set({ processedLinks: links }),
     }),
     {
       name: 'youtube-processor-history',

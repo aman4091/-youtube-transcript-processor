@@ -13,6 +13,7 @@ export interface YouTubeVideo {
   thumbnail: string;
   publishedAt: string;
   channelTitle: string;
+  channelId: string;
   description: string;
   duration: string;
   durationSeconds: number;
@@ -548,6 +549,7 @@ export async function fetchChannelVideos(
             thumbnail: item.snippet.thumbnails.high?.url || item.snippet.thumbnails.medium?.url,
             publishedAt: item.snippet.publishedAt,
             channelTitle: item.snippet.channelTitle,
+            channelId: channelId,
             description: item.snippet.description,
             duration: formatDuration(durationSeconds),
             durationSeconds,

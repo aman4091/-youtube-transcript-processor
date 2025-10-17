@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { History, Play, Trash2, Youtube, CheckCircle, X } from 'lucide-react';
 import { useHistoryStore } from '../stores/historyStore';
-import { useSettingsStore } from '../stores/settingsStore';
 
 interface ProcessedVideosProps {
   onVideoSelect: (
@@ -18,7 +17,6 @@ interface ProcessedVideosProps {
 
 export default function ProcessedVideos({ onVideoSelect, onClose }: ProcessedVideosProps) {
   const { processedLinks, clearHistory, removeProcessing, removeVideoCompletely } = useHistoryStore();
-  const { settings } = useSettingsStore();
 
   const [selectedTargetChannel, setSelectedTargetChannel] = useState<string>('all');
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
