@@ -245,6 +245,7 @@ export default function ShortsFinder({ onClose }: ShortsFinderProps) {
         <VideoGrid
           onVideoSelect={handleVideoClick}
           onBatchSelect={() => {}} // Not needed for shorts finder
+          skipTargetChannelSelection={true} // Skip target channel modal for shorts analysis
         />
       </div>
     </div>

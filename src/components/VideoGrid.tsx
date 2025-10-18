@@ -18,9 +18,10 @@ interface VideoGridProps {
   }>) => void;
   onVideosLoaded?: (videos: YouTubeVideo[]) => void;
   onPushToChat?: () => void;
+  skipTargetChannelSelection?: boolean; // Skip target channel modal (for Shorts Finder)
 }
 
-export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded, onPushToChat }: VideoGridProps) {
+export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded, onPushToChat, skipTargetChannelSelection = false }: VideoGridProps) {
   const { settings, updateSettings } = useSettingsStore();
   const { isLinkProcessed } = useHistoryStore();
   const { getQueueCount } = useTempQueueStore();
@@ -168,10 +169,17 @@ export default function VideoGrid({ onVideoSelect, onBatchSelect, onVideosLoaded
 
 
   const handleVideoClick = (video: YouTubeVideo) => {
+    const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
+
+    // Skip target channel selection if requested (e.g., for Shorts Finder)
+    if (skipTargetChannelSelection) {
+      onVideoSelect(videoUrl, video.title, undefined, undefined, video.channelTitle);
+      return;
+    }
+
     // Check if target channels are configured
     if (settings.targetChannels.length === 0) {
       // No target channels configured, process without selecting
-      const videoUrl = `https://www.youtube.com/watch?v=${video.videoId}`;
       onVideoSelect(videoUrl, video.title, undefined, undefined, video.channelTitle);
       return;
     }
