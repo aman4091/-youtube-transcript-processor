@@ -9,6 +9,7 @@ import ProcessedVideos from './components/ProcessedVideos';
 import TitleGenerator from './components/TitleGenerator';
 import TitleConfirmModal from './components/TitleConfirmModal';
 import ManualProcessingModal from './components/ManualProcessingModal';
+import TitleCreationPage from './components/TitleCreationPage';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -50,6 +51,7 @@ interface Results {
 function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [showTitleCreationPage, setShowTitleCreationPage] = useState(false);
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
     status: '',
@@ -992,6 +994,15 @@ function App() {
     }
   };
 
+  // If title creation page is open, show only title page
+  if (showTitleCreationPage) {
+    return (
+      <TitleCreationPage
+        onClose={() => setShowTitleCreationPage(false)}
+      />
+    );
+  }
+
   // If history view is open, show only history page
   if (isHistoryOpen) {
     return (
@@ -1008,6 +1019,7 @@ function App() {
         onProcess={handleProcess}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenTitlePage={() => setShowTitleCreationPage(true)}
         onGoHome={() => {
           // Clear all processing states and go back to homepage
           setResults(null);
@@ -1016,6 +1028,7 @@ function App() {
           setShowTitleConfirm(false);
           setShowTitleGenerator(false);
           setShowManualModal(false);
+          setShowTitleCreationPage(false);
           setProcessingState({ isProcessing: false, status: '' });
         }}
         onPushToChat={handlePushToChat}

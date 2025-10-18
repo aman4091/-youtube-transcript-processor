@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Youtube, Settings as SettingsIcon, History, Send } from 'lucide-react';
+import { Youtube, Settings as SettingsIcon, History, Send, Sparkles } from 'lucide-react';
 import { isValidYouTubeUrl } from '../utils/linkValidator';
 import { useHistoryStore } from '../stores/historyStore';
 
@@ -7,13 +7,14 @@ interface InputSectionProps {
   onProcess: (url: string) => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
+  onOpenTitlePage: () => void;
   onGoHome?: () => void;
   onPushToChat?: () => void;
   queueCount?: number;
   isProcessing: boolean;
 }
 
-export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
+export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onOpenTitlePage, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -84,6 +85,14 @@ export default function InputSection({ onProcess, onOpenSettings, onOpenHistory,
             >
               <History className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>History</span>
+            </button>
+
+            <button
+              onClick={onOpenTitlePage}
+              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm sm:text-base"
+            >
+              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Title</span>
             </button>
 
             <button
