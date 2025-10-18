@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Youtube, Settings as SettingsIcon, History, Send, Sparkles } from 'lucide-react';
+import { Youtube, Settings as SettingsIcon, History, Send, Sparkles, Scissors } from 'lucide-react';
 import { isValidYouTubeUrl } from '../utils/linkValidator';
 import { useHistoryStore } from '../stores/historyStore';
 
@@ -7,6 +7,7 @@ interface InputSectionProps {
   onProcess: (url: string) => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
+  onOpenShortsFinder: () => void;
   onOpenTitlePage: () => void;
   onGoHome?: () => void;
   onPushToChat?: () => void;
@@ -14,7 +15,7 @@ interface InputSectionProps {
   isProcessing: boolean;
 }
 
-export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onOpenTitlePage, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
+export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onOpenShortsFinder, onOpenTitlePage, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -85,6 +86,15 @@ export default function InputSection({ onProcess, onOpenSettings, onOpenHistory,
             >
               <History className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>History</span>
+            </button>
+
+            <button
+              onClick={onOpenShortsFinder}
+              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm sm:text-base"
+            >
+              <Scissors className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="hidden sm:inline">Find Shorts</span>
+              <span className="sm:hidden">Shorts</span>
             </button>
 
             <button

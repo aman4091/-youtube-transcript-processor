@@ -10,6 +10,7 @@ import TitleGenerator from './components/TitleGenerator';
 import TitleConfirmModal from './components/TitleConfirmModal';
 import ManualProcessingModal from './components/ManualProcessingModal';
 import TitleCreationPage from './components/TitleCreationPage';
+import ShortsFinder from './components/ShortsFinder';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -52,6 +53,7 @@ function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showTitleCreationPage, setShowTitleCreationPage] = useState(false);
+  const [showShortsFinder, setShowShortsFinder] = useState(false);
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
     status: '',
@@ -994,6 +996,15 @@ function App() {
     }
   };
 
+  // If shorts finder is open, show only shorts finder page
+  if (showShortsFinder) {
+    return (
+      <ShortsFinder
+        onClose={() => setShowShortsFinder(false)}
+      />
+    );
+  }
+
   // If title creation page is open, show only title page
   if (showTitleCreationPage) {
     return (
@@ -1019,6 +1030,7 @@ function App() {
         onProcess={handleProcess}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        onOpenShortsFinder={() => setShowShortsFinder(true)}
         onOpenTitlePage={() => setShowTitleCreationPage(true)}
         onGoHome={() => {
           // Clear all processing states and go back to homepage
