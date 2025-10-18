@@ -4,7 +4,6 @@ import {
   Trophy,
   Clock,
   Copy,
-  ExternalLink,
   ChevronDown,
   ChevronUp,
   Sparkles,
@@ -12,8 +11,13 @@ import {
   Lightbulb,
   BookOpen,
   CheckCircle,
+  Send,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 import { ShortSegment } from '../types/shorts';
+import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useScriptCounterStore } from '../stores/scriptCounterStore';
 
 interface ShortsResultsProps {
   shorts: ShortSegment[];
@@ -23,8 +27,13 @@ interface ShortsResultsProps {
 }
 
 export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: ShortsResultsProps) {
+  const { addToQueue } = useTempQueueStore();
+  const { getNextCounter } = useScriptCounterStore();
+
   const [expandedShorts, setExpandedShorts] = useState<Set<number>>(new Set());
+  const [selectedShorts, setSelectedShorts] = useState<Set<number>>(new Set());
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [showSuccess, setShowSuccess] = useState(false);
 
   const toggleExpand = (index: number) => {
     const newExpanded = new Set(expandedShorts);
@@ -43,12 +52,82 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
     setTimeout(() => setCopiedIndex(null), 2000);
   };
 
-  const openInYouTube = (startTime: string) => {
-    // Convert MM:SS to seconds
-    const parts = startTime.split(':');
-    const totalSeconds = parseInt(parts[0]) * 60 + parseInt(parts[1]);
-    const urlWithTimestamp = `${videoUrl}&t=${totalSeconds}s`;
-    window.open(urlWithTimestamp, '_blank');
+  const toggleSelection = (index: number) => {
+    const newSelected = new Set(selectedShorts);
+    if (newSelected.has(index)) {
+      newSelected.delete(index);
+    } else {
+      newSelected.add(index);
+    }
+    setSelectedShorts(newSelected);
+  };
+
+  const selectAllHighScores = () => {
+    const highScoreIndices = shorts
+      .map((short, index) => (short.score >= 8 ? index : -1))
+      .filter((index) => index !== -1);
+    setSelectedShorts(new Set(highScoreIndices));
+  };
+
+  const clearSelection = () => {
+    setSelectedShorts(new Set());
+  };
+
+  const formatShortForQueue = (short: ShortSegment): string => {
+    return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⏱️ TIMESTAMP: ${short.startTime} - ${short.endTime} (${short.durationSeconds}s)
+🏆 SCORE: ${short.score}/10 | 📂 CATEGORY: ${short.category.toUpperCase()}
+
+📌 TITLE:
+${short.title}
+
+📝 DESCRIPTION:
+${short.description}
+
+💡 WHY THIS WORKS:
+${short.reason}
+
+📄 TRANSCRIPT:
+${short.transcript}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+`;
+  };
+
+  const handleAddToQueue = () => {
+    if (selectedShorts.size === 0) {
+      return;
+    }
+
+    // Get selected shorts
+    const selectedShortsData = Array.from(selectedShorts)
+      .map((index) => shorts[index])
+      .sort((a, b) => b.score - a.score); // Sort by score descending
+
+    // Format content
+    let content = `🎬 VIDEO: ${videoTitle}\n`;
+    content += `🔗 URL: ${videoUrl}\n`;
+    content += `✂️ TOTAL SHORTS: ${selectedShortsData.length}\n`;
+    content += `\n\n`;
+
+    selectedShortsData.forEach((short, idx) => {
+      content += `SHORT #${idx + 1}\n`;
+      content += formatShortForQueue(short);
+    });
+
+    // Get next counter and add to queue with counter-based filename
+    const nextCounter = getNextCounter();
+    const filename = `${nextCounter}_shorts.txt`;
+    addToQueue(content, 'Shorts Collection', nextCounter, filename);
+
+    // Show success message
+    setShowSuccess(true);
+    setTimeout(() => setShowSuccess(false), 3000);
+
+    // Clear selection
+    clearSelection();
+
+    console.log(`✅ Added ${selectedShortsData.length} shorts to queue as ${filename}`);
   };
 
   const getScoreColor = (score: number): string => {
@@ -97,24 +176,71 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Success Notification */}
+      {showSuccess && (
+        <div className="fixed top-4 right-4 z-50 bg-green-600 text-white px-6 py-3 rounded-lg shadow-xl flex items-center gap-2 animate-fade-in">
+          <CheckCircle className="w-5 h-5" />
+          <span className="font-medium">Shorts added to queue!</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              <span className="hidden sm:inline">Back to Videos</span>
-            </button>
-            <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
-                {videoTitle}
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                Found {shorts.length} potential short{shorts.length !== 1 ? 's' : ''} (30-60 seconds)
-              </p>
+          <div className="flex flex-col gap-4">
+            {/* Top Row: Back Button + Title */}
+            <div className="flex items-center gap-4">
+              <button
+                onClick={onBack}
+                className="flex items-center gap-2 px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                <span className="hidden sm:inline">Back to Videos</span>
+              </button>
+              <div className="flex-1 min-w-0">
+                <h1 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white truncate">
+                  {videoTitle}
+                </h1>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Found {shorts.length} potential short{shorts.length !== 1 ? 's' : ''} (30-60 seconds)
+                  {selectedShorts.size > 0 && (
+                    <span className="ml-2 text-purple-600 dark:text-purple-400 font-semibold">
+                      • {selectedShorts.size} selected
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* Bottom Row: Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={selectAllHighScores}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-lg transition-colors text-sm font-medium"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>Select Best (8+)</span>
+              </button>
+
+              {selectedShorts.size > 0 && (
+                <>
+                  <button
+                    onClick={clearSelection}
+                    className="flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors text-sm font-medium"
+                  >
+                    <Square className="w-4 h-4" />
+                    <span>Clear Selection</span>
+                  </button>
+
+                  <button
+                    onClick={handleAddToQueue}
+                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium shadow-md"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>Add to Queue ({selectedShorts.size})</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>
@@ -126,15 +252,34 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
           {shorts.map((short, index) => {
             const isExpanded = expandedShorts.has(index);
             const isCopied = copiedIndex === index;
+            const isSelected = selectedShorts.has(index);
 
             return (
               <div
                 key={index}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-2 border-transparent hover:border-purple-500 dark:hover:border-purple-400"
+                className={`bg-white dark:bg-gray-800 rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border-2 ${
+                  isSelected
+                    ? 'border-purple-600 ring-4 ring-purple-200 dark:ring-purple-900'
+                    : 'border-transparent hover:border-purple-500 dark:hover:border-purple-400'
+                }`}
               >
                 {/* Card Header */}
-                <div className={`bg-gradient-to-r ${getScoreColor(short.score)} p-4 text-white`}>
-                  <div className="flex items-center justify-between mb-2">
+                <div className={`bg-gradient-to-r ${getScoreColor(short.score)} p-4 text-white relative`}>
+                  {/* Selection Checkbox */}
+                  <div className="absolute top-3 right-3">
+                    <button
+                      onClick={() => toggleSelection(index)}
+                      className="p-2 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-lg transition-all"
+                    >
+                      {isSelected ? (
+                        <CheckSquare className="w-6 h-6 text-white" />
+                      ) : (
+                        <Square className="w-6 h-6 text-white" />
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-2 pr-12">
                     <div className="flex items-center gap-2">
                       <Trophy className="w-5 h-5" />
                       <span className="font-bold text-lg">{short.score}/10</span>
@@ -212,30 +357,23 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
                     )}
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex gap-2 mt-4">
+                  {/* Action Button */}
+                  <div className="mt-4">
                     <button
                       onClick={() => copyTimestamps(short, index)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors text-sm font-medium"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium"
                     >
                       {isCopied ? (
                         <>
-                          <CheckCircle className="w-4 h-4 text-green-600" />
-                          <span className="text-green-600">Copied!</span>
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Copied!</span>
                         </>
                       ) : (
                         <>
                           <Copy className="w-4 h-4" />
-                          Copy
+                          Copy Details
                         </>
                       )}
-                    </button>
-                    <button
-                      onClick={() => openInYouTube(short.startTime)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors text-sm font-medium"
-                    >
-                      <ExternalLink className="w-4 h-4" />
-                      Open
                     </button>
                   </div>
                 </div>
