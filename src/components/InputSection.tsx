@@ -68,60 +68,63 @@ export default function InputSection({ onProcess, onOpenSettings, onOpenHistory,
         </div>
       </header>
 
-      {/* Navigation Bar */}
-      <nav className="w-full bg-gray-50 dark:bg-gray-900 sticky top-0 z-50 border-b-2 border-gray-200 dark:border-gray-700 shadow-md">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={onGoHome}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-blue-600 text-white font-semibold border-b-4 border-blue-700 hover:bg-blue-700 transition-colors text-sm sm:text-base"
-            >
-              <Youtube className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Home</span>
-            </button>
+      {/* Navigation Bar - Professional Design */}
+      <nav className="w-full bg-white dark:bg-gray-800 sticky top-0 z-50 border-b border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="flex items-center justify-between">
+            {/* Left side navigation links - NO SCROLLBAR */}
+            <div className="flex items-center gap-1 flex-1 overflow-hidden">
+              <button
+                onClick={onGoHome}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 border-b-2 border-blue-600 dark:border-blue-400 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <Youtube className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span>Home</span>
+              </button>
 
-            <button
-              onClick={onOpenHistory}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm sm:text-base"
-            >
-              <History className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>History</span>
-            </button>
+              <button
+                onClick={onOpenHistory}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <History className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span>History</span>
+              </button>
 
-            <button
-              onClick={onOpenShortsFinder}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm sm:text-base"
-            >
-              <Scissors className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="hidden sm:inline">Find Shorts</span>
-              <span className="sm:hidden">Shorts</span>
-            </button>
+              <button
+                onClick={onOpenShortsFinder}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <Scissors className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span className="hidden sm:inline">Find Shorts</span>
+                <span className="sm:hidden">Shorts</span>
+              </button>
 
-            <button
-              onClick={onOpenTitlePage}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-purple-600 dark:hover:text-purple-400 transition-colors font-medium text-sm sm:text-base"
-            >
-              <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Title</span>
-            </button>
+              <button
+                onClick={onOpenTitlePage}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span>Title</span>
+              </button>
 
-            <button
-              onClick={onOpenSettings}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-gray-900 dark:hover:text-white transition-colors font-medium text-sm sm:text-base"
-            >
-              <SettingsIcon className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Settings</span>
-            </button>
+              <button
+                onClick={onOpenSettings}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <SettingsIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span>Settings</span>
+              </button>
+            </div>
 
-            {/* Push to Chat Button */}
+            {/* Right side action button */}
             {onPushToChat && queueCount > 0 && (
               <button
                 onClick={onPushToChat}
-                className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-green-600 text-white hover:bg-green-700 transition-colors font-medium text-sm sm:text-base relative ml-auto"
+                className="flex items-center gap-1.5 px-4 sm:px-5 py-2 sm:py-2.5 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-lg transition-all font-medium text-sm shadow-sm hover:shadow-md relative ml-4 whitespace-nowrap"
               >
-                <Send className="w-4 h-4 sm:w-5 sm:h-5" />
+                <Send className="w-4 h-4" />
                 <span>Push to Chat</span>
-                <span className="absolute -top-1 -right-1 bg-red-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5">
                   {queueCount}
                 </span>
               </button>

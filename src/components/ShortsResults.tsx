@@ -31,7 +31,7 @@ interface ShortsResultsProps {
   onBack: () => void;
 }
 
-export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: ShortsResultsProps) {
+export default function ShortsResults({ shorts, videoUrl: _videoUrl, videoTitle, onBack }: ShortsResultsProps) {
   const { addToQueue } = useTempQueueStore();
   const { getNextCounter } = useScriptCounterStore();
   const { settings } = useSettingsStore();
@@ -153,28 +153,8 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
       ? rewrittenScripts.get(index)
       : short.transcript;
 
-    const scriptLabel = rewrittenScripts.has(index)
-      ? '🎬 VIRAL SCRIPT (AI REWRITTEN)'
-      : '📄 TRANSCRIPT';
-
-    return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-⏱️ TIMESTAMP: ${short.startTime} - ${short.endTime} (${short.durationSeconds}s)
-🏆 SCORE: ${short.score}/10 | 📂 CATEGORY: ${short.category.toUpperCase()}
-
-📌 TITLE:
-${short.title}
-
-📝 DESCRIPTION:
-${short.description}
-
-💡 WHY THIS WORKS:
-${short.reason}
-
-${scriptLabel}:
-${scriptContent}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-`;
+    // SCRIPT ONLY - No title, description, or other metadata
+    return scriptContent || '';
   };
 
   const handleAddToQueue = () => {
@@ -187,21 +167,22 @@ ${scriptContent}
       .map((index) => ({ short: shorts[index], originalIndex: index }))
       .sort((a, b) => b.short.score - a.short.score); // Sort by score descending
 
-    // Format content
-    let content = `🎬 VIDEO: ${videoTitle}\n`;
-    content += `🔗 URL: ${videoUrl}\n`;
-    content += `✂️ TOTAL SHORTS: ${selectedShortsWithIndices.length}\n`;
-    content += `\n\n`;
+    // SCRIPT ONLY - No headers, no video info, just the scripts
+    let content = '';
 
     selectedShortsWithIndices.forEach((item, idx) => {
-      content += `SHORT #${idx + 1}\n`;
-      content += formatShortForQueue(item.short, item.originalIndex);
+      const script = formatShortForQueue(item.short, item.originalIndex);
+      content += script;
+      // Add separator between multiple shorts
+      if (idx < selectedShortsWithIndices.length - 1) {
+        content += '\n\n---\n\n';
+      }
     });
 
     // Get next counter and add to queue with counter-based filename
     const nextCounter = getNextCounter();
-    const filename = `${nextCounter}_shorts.txt`;
-    addToQueue(content, 'Shorts Collection', nextCounter, filename);
+    const filename = `${nextCounter}_short.txt`; // Filename for Telegram
+    addToQueue(content, filename, nextCounter); // Use filename as modelName so Telegram uses it
 
     // Show success message
     setShowSuccess(true);

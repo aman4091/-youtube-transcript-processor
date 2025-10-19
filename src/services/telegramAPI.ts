@@ -141,12 +141,13 @@ export async function sendToTelegram(
   try {
     const url = `${TELEGRAM_API_BASE}${botToken}/sendDocument`;
 
-    // Create a simple filename based on counter
-    // If model name contains "Title", it's a title file
-    const isTitle = modelName.includes('Title');
-    const filename = counter
-      ? (isTitle ? `${counter}_title.txt` : `${counter}.txt`)
-      : `script_${Date.now()}.txt`;
+    // Use modelName as filename if it looks like a filename (contains .txt)
+    // Otherwise generate filename from counter
+    const filename = modelName.endsWith('.txt')
+      ? modelName // Use the full modelName if it's already a filename (e.g., "1_short.txt")
+      : (counter
+          ? (modelName.includes('Title') ? `${counter}_title.txt` : `${counter}.txt`)
+          : `script_${Date.now()}.txt`);
 
     // Create a Blob from the content (pure script only)
     const blob = new Blob([content], { type: 'text/plain' });

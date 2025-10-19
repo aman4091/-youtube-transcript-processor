@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import InputSection from './components/InputSection';
-import SettingsModal from './components/SettingsModal';
+import SettingsPage from './components/SettingsPage';
 import ProcessingStatus from './components/ProcessingStatus';
 import SideBySideComparison from './components/SideBySideComparison';
 import VideoGrid from './components/VideoGrid';
@@ -50,7 +50,7 @@ interface Results {
 }
 
 function App() {
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showSettingsPage, setShowSettingsPage] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showTitleCreationPage, setShowTitleCreationPage] = useState(false);
   const [showShortsFinder, setShowShortsFinder] = useState(false);
@@ -1001,6 +1001,25 @@ function App() {
     return (
       <ShortsFinder
         onClose={() => setShowShortsFinder(false)}
+        onNavigateHome={() => setShowShortsFinder(false)}
+        onNavigateHistory={() => { setShowShortsFinder(false); setIsHistoryOpen(true); }}
+        onNavigateTitle={() => { setShowShortsFinder(false); setShowTitleCreationPage(true); }}
+        onNavigateSettings={() => { setShowShortsFinder(false); setShowSettingsPage(true); }}
+        onPushToChat={handlePushToChat}
+      />
+    );
+  }
+
+  // If settings page is open, show only settings page
+  if (showSettingsPage) {
+    return (
+      <SettingsPage
+        onClose={() => setShowSettingsPage(false)}
+        onNavigateHome={() => setShowSettingsPage(false)}
+        onNavigateHistory={() => { setShowSettingsPage(false); setIsHistoryOpen(true); }}
+        onNavigateShorts={() => { setShowSettingsPage(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => { setShowSettingsPage(false); setShowTitleCreationPage(true); }}
+        onPushToChat={handlePushToChat}
       />
     );
   }
@@ -1010,6 +1029,11 @@ function App() {
     return (
       <TitleCreationPage
         onClose={() => setShowTitleCreationPage(false)}
+        onNavigateHome={() => setShowTitleCreationPage(false)}
+        onNavigateHistory={() => { setShowTitleCreationPage(false); setIsHistoryOpen(true); }}
+        onNavigateShorts={() => { setShowTitleCreationPage(false); setShowShortsFinder(true); }}
+        onNavigateSettings={() => { setShowTitleCreationPage(false); setShowSettingsPage(true); }}
+        onPushToChat={handlePushToChat}
       />
     );
   }
@@ -1028,7 +1052,7 @@ function App() {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
       <InputSection
         onProcess={handleProcess}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => setShowSettingsPage(true)}
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenShortsFinder={() => setShowShortsFinder(true)}
         onOpenTitlePage={() => setShowTitleCreationPage(true)}
@@ -1119,8 +1143,6 @@ function App() {
           onPushToChat={handlePushToChat}
         />
       ) : null}
-
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
 
       {/* Title Confirmation Modal */}
       {showTitleConfirm && (

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { Upload, FileText, Sparkles, X, RefreshCw, Home, Loader2 } from 'lucide-react';
+import { Upload, FileText, Sparkles, X, RefreshCw, Loader2, Youtube } from 'lucide-react';
+import NavigationBar from './NavigationBar';
 import { processUploadedFile, isValidFileType, formatFileSize, FileProcessResult } from '../utils/fileProcessor';
 import { formatCharacterCount } from '../utils/characterCounter';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -9,9 +10,21 @@ import { processWithOpenRouter } from '../services/aiProcessors';
 
 interface TitleCreationPageProps {
   onClose: () => void;
+  onNavigateHome: () => void;
+  onNavigateHistory: () => void;
+  onNavigateShorts: () => void;
+  onNavigateSettings: () => void;
+  onPushToChat?: () => void;
 }
 
-export default function TitleCreationPage({ onClose }: TitleCreationPageProps) {
+export default function TitleCreationPage({
+  onClose: _onClose,
+  onNavigateHome,
+  onNavigateHistory,
+  onNavigateShorts,
+  onNavigateSettings,
+  onPushToChat
+}: TitleCreationPageProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [fileInfo, setFileInfo] = useState<FileProcessResult | null>(null);
@@ -22,7 +35,7 @@ export default function TitleCreationPage({ onClose }: TitleCreationPageProps) {
   const [error, setError] = useState<string | null>(null);
 
   const { settings } = useSettingsStore();
-  const { addToQueue } = useTempQueueStore();
+  const { addToQueue, getQueueCount } = useTempQueueStore();
   const { getNextCounter } = useScriptCounterStore();
 
   // Handle file selection
@@ -170,31 +183,49 @@ export default function TitleCreationPage({ onClose }: TitleCreationPageProps) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-blue-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900">
-      {/* Header */}
-      <div className="bg-white dark:bg-gray-800 shadow-md sticky top-0 z-40">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-purple-500 to-blue-500 p-2 rounded-lg">
-                <Sparkles className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
-                  Title Creation
-                </h1>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Upload script & generate AI-powered titles
-                </p>
-              </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* Top Header with Logo */}
+      <header className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Youtube className="w-8 h-8 sm:w-10 sm:h-10 text-red-600 flex-shrink-0" />
+            <div>
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+                YouTube Transcript Processor
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                Process & analyze YouTube transcripts with AI
+              </p>
             </div>
-            <button
-              onClick={onClose}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg transition-colors"
-            >
-              <Home className="w-4 h-4" />
-              Back to Home
-            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Bar */}
+      <NavigationBar
+        currentPage="title"
+        onNavigateHome={onNavigateHome}
+        onNavigateHistory={onNavigateHistory}
+        onNavigateShorts={onNavigateShorts}
+        onNavigateTitle={() => {}} // Already on title page
+        onNavigateSettings={onNavigateSettings}
+        onPushToChat={onPushToChat}
+        queueCount={getQueueCount()}
+      />
+
+      {/* Page Header */}
+      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex items-center gap-3">
+            <div className="p-3 bg-white bg-opacity-20 rounded-xl">
+              <Sparkles className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold">Title Creation</h2>
+              <p className="text-white text-opacity-90 text-sm sm:text-base">
+                Upload script & generate AI-powered titles
+              </p>
+            </div>
           </div>
         </div>
       </div>
