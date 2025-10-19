@@ -22,6 +22,7 @@ interface SettingsPageProps {
   onNavigateHistory: () => void;
   onNavigateShorts: () => void;
   onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
   onPushToChat?: () => void;
 }
 
@@ -31,6 +32,7 @@ export default function SettingsPage({
   onNavigateHistory,
   onNavigateShorts,
   onNavigateTitle,
+  onNavigateMonitoring,
   onPushToChat,
 }: SettingsPageProps) {
   const { settings, updateSettings } = useSettingsStore();
@@ -341,6 +343,7 @@ export default function SettingsPage({
         onNavigateHistory={onNavigateHistory}
         onNavigateShorts={onNavigateShorts}
         onNavigateTitle={onNavigateTitle}
+        onNavigateMonitoring={onNavigateMonitoring}
         onNavigateSettings={() => {}} // Already on settings page
         onPushToChat={onPushToChat}
         queueCount={queuedScripts.length}
@@ -965,6 +968,106 @@ export default function SettingsPage({
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Auto-Monitoring Settings */}
+          <div className="space-y-4 border-t border-gray-200 dark:border-gray-700 pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold">24/7 Auto-Monitoring</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Automatically monitor channels and process new videos every 2 hours
+                </p>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={localSettings.autoMonitoringEnabled}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, autoMonitoringEnabled: e.target.checked })
+                  }
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 dark:peer-focus:ring-blue-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-green-600"></div>
+              </label>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Check Interval
+              </label>
+              <select
+                value={localSettings.monitoringIntervalHours}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, monitoringIntervalHours: parseInt(e.target.value) })
+                }
+                disabled={!localSettings.autoMonitoringEnabled}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="1">Every 1 hour</option>
+                <option value="2">Every 2 hours (Recommended)</option>
+                <option value="4">Every 4 hours</option>
+                <option value="6">Every 6 hours</option>
+                <option value="12">Every 12 hours</option>
+                <option value="24">Every 24 hours</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                How often to check for new videos
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                AI Model for Auto-Processing
+              </label>
+              <select
+                value={localSettings.monitoringAIModel}
+                onChange={(e) =>
+                  setLocalSettings({ ...localSettings, monitoringAIModel: e.target.value as any })
+                }
+                disabled={!localSettings.autoMonitoringEnabled}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="deepseek">DeepSeek (Fast & Cheap)</option>
+                <option value="gemini-flash">Gemini 2.5 Flash (Balanced)</option>
+                <option value="gemini-pro">Gemini 2.5 Pro (Best Quality)</option>
+                <option value="openrouter">OpenRouter (Customizable)</option>
+              </select>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Which AI model to use for automatic processing
+              </p>
+            </div>
+
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-md p-4">
+              <p className="text-sm text-green-800 dark:text-green-200 font-bold mb-2">
+                ✨ How Auto-Monitoring Works:
+              </p>
+              <ol className="text-xs text-green-700 dark:text-green-300 space-y-1 list-decimal list-inside ml-2">
+                <li>Checks your source channels automatically every {localSettings.monitoringIntervalHours} hours</li>
+                <li>Finds new videos that match your duration/view filters</li>
+                <li>Fetches transcripts and processes with {localSettings.monitoringAIModel.replace('-', ' ').toUpperCase()}</li>
+                <li>Sends processed scripts to Telegram automatically</li>
+                <li>Runs 24/7 in the background - no manual work needed!</li>
+              </ol>
+            </div>
+
+            {localSettings.autoMonitoringEnabled && (
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-md p-4">
+                <p className="text-sm text-blue-800 dark:text-blue-200 font-bold mb-2">
+                  📋 Setup Required:
+                </p>
+                <ol className="text-xs text-blue-700 dark:text-blue-300 space-y-1 list-decimal list-inside ml-2">
+                  <li>Create a free Supabase account at supabase.com</li>
+                  <li>Run the database migration (see README_MONITORING.md)</li>
+                  <li>Deploy Edge Functions to Supabase</li>
+                  <li>Add environment variables: VITE_SUPABASE_URL & VITE_SUPABASE_ANON_KEY</li>
+                  <li>Click "Sync Settings" button to activate monitoring</li>
+                </ol>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                  📚 Full setup guide: <code className="bg-blue-100 dark:bg-blue-900 px-1 rounded">README_MONITORING.md</code>
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Backup & Restore */}

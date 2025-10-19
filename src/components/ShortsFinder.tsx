@@ -15,6 +15,7 @@ interface ShortsFinderProps {
   onNavigateHome: () => void;
   onNavigateHistory: () => void;
   onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
   onNavigateSettings: () => void;
   onPushToChat?: () => void;
 }
@@ -26,6 +27,7 @@ export default function ShortsFinder({
   onNavigateHome,
   onNavigateHistory,
   onNavigateTitle,
+  onNavigateMonitoring,
   onNavigateSettings,
   onPushToChat,
 }: ShortsFinderProps) {
@@ -181,6 +183,13 @@ export default function ShortsFinder({
         videoUrl={`https://www.youtube.com/watch?v=${selectedVideo.videoId}`}
         videoTitle={selectedVideo.title}
         onBack={handleBackToVideos}
+        onNavigateHome={onNavigateHome}
+        onNavigateHistory={onNavigateHistory}
+        onNavigateShorts={() => handleBackToVideos()} // Go back to shorts finder videos list
+        onNavigateTitle={onNavigateTitle}
+        onNavigateMonitoring={onNavigateMonitoring}
+        onNavigateSettings={onNavigateSettings}
+        onPushToChat={onPushToChat}
       />
     );
   }
@@ -212,6 +221,7 @@ export default function ShortsFinder({
         onNavigateHistory={onNavigateHistory}
         onNavigateShorts={() => {}} // Already on shorts page
         onNavigateTitle={onNavigateTitle}
+        onNavigateMonitoring={onNavigateMonitoring}
         onNavigateSettings={onNavigateSettings}
         onPushToChat={onPushToChat}
         queueCount={getQueueCount()}

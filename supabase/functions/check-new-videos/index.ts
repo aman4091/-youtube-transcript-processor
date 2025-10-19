@@ -1,0 +1,366 @@
+// Supabase Edge Function: check-new-videos
+// Purpose: Cron job that runs every 2 hours to check for new YouTube videos
+// and queue them for processing
+
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+
+// Types
+interface MonitorSettings {
+  enabled: boolean;
+  source_channels: string[];
+  youtube_api_key: string;
+  check_interval_hours: number;
+  min_video_duration_minutes: number;
+  max_video_duration_minutes: number;
+  min_view_count: number;
+  keywords_include: string[];
+  keywords_exclude: string[];
+  max_videos_per_check: number;
+}
+
+interface YouTubeVideo {
+  videoId: string;
+  title: string;
+  channelId: string;
+  channelTitle: string;
+  publishedAt: string;
+  duration: string; // ISO 8601 format (PT15M33S)
+  viewCount: number;
+  url: string;
+}
+
+serve(async (req) => {
+  try {
+    console.log('🔍 Starting check-new-videos cron job...');
+    const startTime = Date.now();
+
+    // Initialize Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Step 1: Fetch monitoring settings
+    console.log('📥 Fetching monitoring settings...');
+    const { data: settings, error: settingsError } = await supabase
+      .from('auto_monitor_settings')
+      .select('*')
+      .eq('user_id', 'default_user')
+      .single();
+
+    if (settingsError || !settings) {
+      throw new Error(`Failed to fetch settings: ${settingsError?.message}`);
+    }
+
+    // Check if monitoring is enabled
+    if (!settings.enabled) {
+      console.log('⏸️ Monitoring is disabled. Skipping check.');
+      return new Response(
+        JSON.stringify({ message: 'Monitoring disabled', skipped: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const monitorSettings: MonitorSettings = settings;
+
+    // Validate YouTube API key
+    if (!monitorSettings.youtube_api_key) {
+      throw new Error('YouTube API key not configured');
+    }
+
+    if (
+      !monitorSettings.source_channels ||
+      monitorSettings.source_channels.length === 0
+    ) {
+      console.log('⚠️ No source channels configured');
+      return new Response(
+        JSON.stringify({ message: 'No channels to monitor', skipped: true }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Step 2: Fetch new videos from all channels
+    console.log(
+      `🔎 Checking ${monitorSettings.source_channels.length} channels...`
+    );
+    const allVideos: YouTubeVideo[] = [];
+    const channelErrors: string[] = [];
+
+    for (const channelUrl of monitorSettings.source_channels) {
+      try {
+        const channelId = extractChannelId(channelUrl);
+        if (!channelId) {
+          console.error(`❌ Invalid channel URL: ${channelUrl}`);
+          channelErrors.push(`Invalid URL: ${channelUrl}`);
+          continue;
+        }
+
+        const videos = await fetchChannelVideos(
+          channelId,
+          monitorSettings.youtube_api_key,
+          monitorSettings.max_videos_per_check || 10
+        );
+
+        console.log(`✓ Found ${videos.length} videos from channel ${channelId}`);
+        allVideos.push(...videos);
+      } catch (error: any) {
+        console.error(`❌ Error fetching channel ${channelUrl}:`, error.message);
+        channelErrors.push(`${channelUrl}: ${error.message}`);
+      }
+    }
+
+    // Step 3: Filter videos based on criteria
+    console.log(`🔍 Filtering ${allVideos.length} videos...`);
+    const filteredVideos = allVideos.filter((video) => {
+      // Duration filter
+      const durationMinutes = parseDuration(video.duration);
+      if (
+        durationMinutes < monitorSettings.min_video_duration_minutes ||
+        durationMinutes > monitorSettings.max_video_duration_minutes
+      ) {
+        return false;
+      }
+
+      // View count filter
+      if (video.viewCount < monitorSettings.min_view_count) {
+        return false;
+      }
+
+      // Keyword include filter
+      if (
+        monitorSettings.keywords_include &&
+        monitorSettings.keywords_include.length > 0
+      ) {
+        const hasIncludeKeyword = monitorSettings.keywords_include.some((kw) =>
+          video.title.toLowerCase().includes(kw.toLowerCase())
+        );
+        if (!hasIncludeKeyword) return false;
+      }
+
+      // Keyword exclude filter
+      if (
+        monitorSettings.keywords_exclude &&
+        monitorSettings.keywords_exclude.length > 0
+      ) {
+        const hasExcludeKeyword = monitorSettings.keywords_exclude.some((kw) =>
+          video.title.toLowerCase().includes(kw.toLowerCase())
+        );
+        if (hasExcludeKeyword) return false;
+      }
+
+      return true;
+    });
+
+    console.log(`✓ ${filteredVideos.length} videos passed filters`);
+
+    // Step 4: Check which videos are already processed
+    const videoIds = filteredVideos.map((v) => v.videoId);
+    const { data: processedVideos, error: processedError } = await supabase
+      .from('processed_videos')
+      .select('video_id')
+      .in('video_id', videoIds);
+
+    if (processedError) {
+      console.error('❌ Error checking processed videos:', processedError);
+    }
+
+    const processedVideoIds = new Set(
+      processedVideos?.map((v) => v.video_id) || []
+    );
+
+    const newVideos = filteredVideos.filter(
+      (v) => !processedVideoIds.has(v.videoId)
+    );
+
+    console.log(`🆕 ${newVideos.length} new videos to process`);
+
+    // Step 5: Add new videos to processing queue
+    let videosQueued = 0;
+    if (newVideos.length > 0) {
+      const queueEntries = newVideos.map((video) => ({
+        video_id: video.videoId,
+        video_url: video.url,
+        video_title: video.title,
+        channel_id: video.channelId,
+        channel_title: video.channelTitle,
+        priority: 0,
+        status: 'pending',
+      }));
+
+      const { data: queuedData, error: queueError } = await supabase
+        .from('processing_queue')
+        .insert(queueEntries)
+        .select();
+
+      if (queueError) {
+        console.error('❌ Error adding to queue:', queueError);
+        throw queueError;
+      }
+
+      videosQueued = queuedData?.length || 0;
+      console.log(`✅ Queued ${videosQueued} videos for processing`);
+
+      // Trigger process-video function for each queued video
+      // (In production, you'd use a proper queue/worker system)
+      for (const video of newVideos.slice(0, 5)) {
+        // Process first 5 immediately
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/process-video`, {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ video_id: video.videoId }),
+          });
+        } catch (err: any) {
+          console.error(`❌ Failed to trigger processing for ${video.videoId}:`, err.message);
+        }
+      }
+    }
+
+    // Step 6: Log monitoring check
+    const duration = Date.now() - startTime;
+    await supabase.from('monitoring_logs').insert({
+      channels_checked: monitorSettings.source_channels.length,
+      new_videos_found: newVideos.length,
+      videos_processed: 0, // Will be updated by process-video function
+      errors: channelErrors.length,
+      status: channelErrors.length > 0 ? 'partial_success' : 'success',
+      error_details: channelErrors.length > 0 ? { errors: channelErrors } : null,
+      duration_ms: duration,
+      api_calls_made: monitorSettings.source_channels.length,
+    });
+
+    console.log(`✅ Check completed in ${duration}ms`);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        channels_checked: monitorSettings.source_channels.length,
+        videos_found: allVideos.length,
+        videos_filtered: filteredVideos.length,
+        new_videos: newVideos.length,
+        videos_queued: videosQueued,
+        errors: channelErrors,
+        duration_ms: duration,
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } }
+    );
+  } catch (error: any) {
+    console.error('❌ Fatal error in check-new-videos:', error);
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: error.message,
+        stack: error.stack,
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+});
+
+// ============================================
+// Helper Functions
+// ============================================
+
+/**
+ * Extract channel ID from YouTube URL
+ */
+function extractChannelId(url: string): string | null {
+  // Handle different YouTube channel URL formats
+  const patterns = [
+    /youtube\.com\/channel\/(UC[\w-]{22})/,
+    /youtube\.com\/c\/([\w-]+)/,
+    /youtube\.com\/@([\w-]+)/,
+    /youtube\.com\/user\/([\w-]+)/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+
+  return null;
+}
+
+/**
+ * Fetch recent videos from a YouTube channel
+ */
+async function fetchChannelVideos(
+  channelId: string,
+  apiKey: string,
+  maxResults: number
+): Promise<YouTubeVideo[]> {
+  // Step 1: Get channel's uploads playlist ID
+  const channelResponse = await fetch(
+    `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${apiKey}`
+  );
+
+  if (!channelResponse.ok) {
+    throw new Error(`YouTube API error: ${channelResponse.statusText}`);
+  }
+
+  const channelData = await channelResponse.json();
+  const uploadsPlaylistId =
+    channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+
+  if (!uploadsPlaylistId) {
+    throw new Error('Could not find uploads playlist');
+  }
+
+  // Step 2: Get recent videos from uploads playlist
+  const playlistResponse = await fetch(
+    `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=${uploadsPlaylistId}&maxResults=${maxResults}&key=${apiKey}`
+  );
+
+  if (!playlistResponse.ok) {
+    throw new Error(`YouTube API error: ${playlistResponse.statusText}`);
+  }
+
+  const playlistData = await playlistResponse.json();
+  const videoIds = playlistData.items?.map(
+    (item: any) => item.snippet.resourceId.videoId
+  );
+
+  if (!videoIds || videoIds.length === 0) {
+    return [];
+  }
+
+  // Step 3: Get video details (duration, views, etc.)
+  const videosResponse = await fetch(
+    `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoIds.join(',')}&key=${apiKey}`
+  );
+
+  if (!videosResponse.ok) {
+    throw new Error(`YouTube API error: ${videosResponse.statusText}`);
+  }
+
+  const videosData = await videosResponse.json();
+
+  return videosData.items.map((item: any) => ({
+    videoId: item.id,
+    title: item.snippet.title,
+    channelId: item.snippet.channelId,
+    channelTitle: item.snippet.channelTitle,
+    publishedAt: item.snippet.publishedAt,
+    duration: item.contentDetails.duration,
+    viewCount: parseInt(item.statistics.viewCount || '0', 10),
+    url: `https://www.youtube.com/watch?v=${item.id}`,
+  }));
+}
+
+/**
+ * Parse ISO 8601 duration to minutes
+ */
+function parseDuration(duration: string): number {
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return 0;
+
+  const hours = parseInt(match[1] || '0', 10);
+  const minutes = parseInt(match[2] || '0', 10);
+  const seconds = parseInt(match[3] || '0', 10);
+
+  return hours * 60 + minutes + seconds / 60;
+}

@@ -11,6 +11,7 @@ import TitleConfirmModal from './components/TitleConfirmModal';
 import ManualProcessingModal from './components/ManualProcessingModal';
 import TitleCreationPage from './components/TitleCreationPage';
 import ShortsFinder from './components/ShortsFinder';
+import MonitoringDashboard from './components/MonitoringDashboard';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -51,6 +52,7 @@ interface Results {
 
 function App() {
   const [showSettingsPage, setShowSettingsPage] = useState(false);
+  const [showMonitoringPage, setShowMonitoringPage] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showTitleCreationPage, setShowTitleCreationPage] = useState(false);
   const [showShortsFinder, setShowShortsFinder] = useState(false);
@@ -1004,6 +1006,7 @@ function App() {
         onNavigateHome={() => setShowShortsFinder(false)}
         onNavigateHistory={() => { setShowShortsFinder(false); setIsHistoryOpen(true); }}
         onNavigateTitle={() => { setShowShortsFinder(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => { setShowShortsFinder(false); setShowMonitoringPage(true); }}
         onNavigateSettings={() => { setShowShortsFinder(false); setShowSettingsPage(true); }}
         onPushToChat={handlePushToChat}
       />
@@ -1019,6 +1022,23 @@ function App() {
         onNavigateHistory={() => { setShowSettingsPage(false); setIsHistoryOpen(true); }}
         onNavigateShorts={() => { setShowSettingsPage(false); setShowShortsFinder(true); }}
         onNavigateTitle={() => { setShowSettingsPage(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => { setShowSettingsPage(false); setShowMonitoringPage(true); }}
+        onPushToChat={handlePushToChat}
+      />
+    );
+  }
+
+  // If monitoring page is open, show only monitoring page
+  if (showMonitoringPage) {
+    return (
+      <MonitoringDashboard
+        onClose={() => setShowMonitoringPage(false)}
+        onNavigateHome={() => setShowMonitoringPage(false)}
+        onNavigateHistory={() => { setShowMonitoringPage(false); setIsHistoryOpen(true); }}
+        onNavigateShorts={() => { setShowMonitoringPage(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => { setShowMonitoringPage(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => {}} // Already on monitoring page
+        onNavigateSettings={() => { setShowMonitoringPage(false); setShowSettingsPage(true); }}
         onPushToChat={handlePushToChat}
       />
     );
@@ -1032,6 +1052,8 @@ function App() {
         onNavigateHome={() => setShowTitleCreationPage(false)}
         onNavigateHistory={() => { setShowTitleCreationPage(false); setIsHistoryOpen(true); }}
         onNavigateShorts={() => { setShowTitleCreationPage(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => {}} // Already on title page
+        onNavigateMonitoring={() => { setShowTitleCreationPage(false); setShowMonitoringPage(true); }}
         onNavigateSettings={() => { setShowTitleCreationPage(false); setShowSettingsPage(true); }}
         onPushToChat={handlePushToChat}
       />

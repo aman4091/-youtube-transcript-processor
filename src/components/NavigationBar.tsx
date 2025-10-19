@@ -1,11 +1,12 @@
-import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send } from 'lucide-react';
+import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send, Activity } from 'lucide-react';
 
 interface NavigationBarProps {
-  currentPage?: 'home' | 'history' | 'shorts' | 'title' | 'settings';
+  currentPage?: 'home' | 'history' | 'shorts' | 'title' | 'monitoring' | 'settings';
   onNavigateHome: () => void;
   onNavigateHistory: () => void;
   onNavigateShorts: () => void;
   onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
   onNavigateSettings: () => void;
   onPushToChat?: () => void;
   queueCount?: number;
@@ -17,6 +18,7 @@ export default function NavigationBar({
   onNavigateHistory,
   onNavigateShorts,
   onNavigateTitle,
+  onNavigateMonitoring,
   onNavigateSettings,
   onPushToChat,
   queueCount = 0,
@@ -55,6 +57,12 @@ export default function NavigationBar({
             <button onClick={onNavigateTitle} className={getButtonClass('title')}>
               <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
               <span>Title</span>
+            </button>
+
+            <button onClick={onNavigateMonitoring} className={getButtonClass('monitoring')}>
+              <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+              <span className="hidden sm:inline">Monitoring</span>
+              <span className="sm:hidden">Monitor</span>
             </button>
 
             <button onClick={onNavigateSettings} className={getButtonClass('settings')}>

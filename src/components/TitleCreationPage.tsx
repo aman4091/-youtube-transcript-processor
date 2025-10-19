@@ -13,6 +13,8 @@ interface TitleCreationPageProps {
   onNavigateHome: () => void;
   onNavigateHistory: () => void;
   onNavigateShorts: () => void;
+  onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
   onNavigateSettings: () => void;
   onPushToChat?: () => void;
 }
@@ -22,6 +24,8 @@ export default function TitleCreationPage({
   onNavigateHome,
   onNavigateHistory,
   onNavigateShorts,
+  onNavigateTitle: _onNavigateTitle,
+  onNavigateMonitoring,
   onNavigateSettings,
   onPushToChat
 }: TitleCreationPageProps) {
@@ -208,6 +212,7 @@ export default function TitleCreationPage({
         onNavigateHistory={onNavigateHistory}
         onNavigateShorts={onNavigateShorts}
         onNavigateTitle={() => {}} // Already on title page
+        onNavigateMonitoring={onNavigateMonitoring}
         onNavigateSettings={onNavigateSettings}
         onPushToChat={onPushToChat}
         queueCount={getQueueCount()}

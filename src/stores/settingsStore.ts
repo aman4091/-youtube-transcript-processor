@@ -32,6 +32,12 @@ export interface Settings {
   channelMinDurations: Record<string, number>;
   // Target channels (user's own channels where videos will be published)
   targetChannels: TargetChannel[];
+  // Auto-monitoring settings
+  autoMonitoringEnabled: boolean;
+  monitoringIntervalHours: number;
+  monitoringAIModel: 'deepseek' | 'gemini-flash' | 'gemini-pro' | 'openrouter';
+  supabaseUrl: string;
+  supabaseAnonKey: string;
 }
 
 interface SettingsStore {
@@ -65,6 +71,12 @@ const defaultSettings: Settings = {
   channelMinDurations: {},
   // Target channels - empty by default
   targetChannels: [],
+  // Auto-monitoring defaults
+  autoMonitoringEnabled: false,
+  monitoringIntervalHours: 2,
+  monitoringAIModel: 'deepseek',
+  supabaseUrl: '',
+  supabaseAnonKey: '',
 };
 
 export const useSettingsStore = create<SettingsStore>()(
@@ -86,7 +98,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'youtube-processor-settings',
-      version: 9,
+      version: 10,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating settings from version ${version}`);
         // Migrate old channelUrl (string) to channelUrls (array)
@@ -138,6 +150,14 @@ export const useSettingsStore = create<SettingsStore>()(
         // Migrate to version 9 - add target channels
         if (version < 9) {
           persistedState.settings.targetChannels = persistedState.settings.targetChannels || [];
+        }
+        // Migrate to version 10 - add auto-monitoring settings
+        if (version < 10) {
+          persistedState.settings.autoMonitoringEnabled = persistedState.settings.autoMonitoringEnabled ?? false;
+          persistedState.settings.monitoringIntervalHours = persistedState.settings.monitoringIntervalHours || 2;
+          persistedState.settings.monitoringAIModel = persistedState.settings.monitoringAIModel || 'deepseek';
+          persistedState.settings.supabaseUrl = persistedState.settings.supabaseUrl || '';
+          persistedState.settings.supabaseAnonKey = persistedState.settings.supabaseAnonKey || '';
         }
         console.log('✓ Settings migrated successfully');
         return persistedState;

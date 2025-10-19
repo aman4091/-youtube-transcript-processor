@@ -17,7 +17,9 @@ import {
   Wand2,
   Loader2,
   RotateCcw,
+  Youtube,
 } from 'lucide-react';
+import NavigationBar from './NavigationBar';
 import { ShortSegment } from '../types/shorts';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
@@ -29,10 +31,29 @@ interface ShortsResultsProps {
   videoUrl: string;
   videoTitle: string;
   onBack: () => void;
+  onNavigateHome: () => void;
+  onNavigateHistory: () => void;
+  onNavigateShorts: () => void;
+  onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
+  onNavigateSettings: () => void;
+  onPushToChat?: () => void;
 }
 
-export default function ShortsResults({ shorts, videoUrl: _videoUrl, videoTitle, onBack }: ShortsResultsProps) {
-  const { addToQueue } = useTempQueueStore();
+export default function ShortsResults({
+  shorts,
+  videoUrl: _videoUrl,
+  videoTitle,
+  onBack,
+  onNavigateHome,
+  onNavigateHistory,
+  onNavigateShorts,
+  onNavigateTitle,
+  onNavigateMonitoring,
+  onNavigateSettings,
+  onPushToChat
+}: ShortsResultsProps) {
+  const { addToQueue, getQueueCount } = useTempQueueStore();
   const { getNextCounter } = useScriptCounterStore();
   const { settings } = useSettingsStore();
 
@@ -248,7 +269,37 @@ export default function ShortsResults({ shorts, videoUrl: _videoUrl, videoTitle,
         </div>
       )}
 
-      {/* Header */}
+      {/* Top Header with Logo */}
+      <header className="w-full bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <Youtube className="w-8 h-8 sm:w-10 sm:h-10 text-red-600 flex-shrink-0" />
+            <div>
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-900 dark:text-white">
+                YouTube Transcript Processor
+              </h1>
+              <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                Process & analyze YouTube transcripts with AI
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Navigation Bar */}
+      <NavigationBar
+        currentPage="shorts"
+        onNavigateHome={onNavigateHome}
+        onNavigateHistory={onNavigateHistory}
+        onNavigateShorts={onNavigateShorts}
+        onNavigateTitle={onNavigateTitle}
+        onNavigateMonitoring={onNavigateMonitoring}
+        onNavigateSettings={onNavigateSettings}
+        onPushToChat={onPushToChat}
+        queueCount={getQueueCount()}
+      />
+
+      {/* Results Header */}
       <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col gap-4">
