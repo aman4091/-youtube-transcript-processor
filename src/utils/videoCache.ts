@@ -62,7 +62,14 @@ export const getCachedVideos = (channelUrl: string): YouTubeVideo[] => {
       return [];
     }
 
-    const data: CachedChannelData = JSON.parse(cached);
+    let data: CachedChannelData;
+    try {
+      data = JSON.parse(cached);
+    } catch (error) {
+      console.error('❌ Failed to parse cached data (corrupted JSON). Clearing cache...', error);
+      clearChannelCache(channelUrl);
+      return [];
+    }
 
     // Double-check: if cached data doesn't have version, it's old
     if (!data.version || data.version < CACHE_VERSION) {
@@ -116,7 +123,15 @@ export const getCachedPageToken = (channelUrl: string): string | undefined => {
       return undefined;
     }
 
-    const data: CachedChannelData = JSON.parse(cached);
+    let data: CachedChannelData;
+    try {
+      data = JSON.parse(cached);
+    } catch (parseError) {
+      console.error('❌ Failed to parse cached data (corrupted JSON). Clearing cache...', parseError);
+      clearChannelCache(channelUrl);
+      return undefined;
+    }
+
     return data.pageToken;
   } catch (error) {
     console.error('Error reading cached pageToken:', error);
@@ -159,7 +174,16 @@ export const mergeVideos = (
 const updateCacheMetadata = (channelUrl: string, videoCount: number): void => {
   try {
     const metadataStr = localStorage.getItem(CACHE_METADATA_KEY);
-    const metadata: CacheMetadata = metadataStr ? JSON.parse(metadataStr) : {};
+    let metadata: CacheMetadata = {};
+
+    if (metadataStr) {
+      try {
+        metadata = JSON.parse(metadataStr);
+      } catch (parseError) {
+        console.error('❌ Failed to parse cache metadata (corrupted JSON). Resetting metadata...', parseError);
+        metadata = {};
+      }
+    }
 
     metadata[channelUrl] = {
       videoCount,
@@ -178,7 +202,14 @@ const updateCacheMetadata = (channelUrl: string, videoCount: number): void => {
 export const getCacheMetadata = (): CacheMetadata => {
   try {
     const metadataStr = localStorage.getItem(CACHE_METADATA_KEY);
-    return metadataStr ? JSON.parse(metadataStr) : {};
+    if (!metadataStr) return {};
+
+    try {
+      return JSON.parse(metadataStr);
+    } catch (parseError) {
+      console.error('❌ Failed to parse cache metadata (corrupted JSON). Returning empty...', parseError);
+      return {};
+    }
   } catch (error) {
     console.error('Error reading cache metadata:', error);
     return {};
@@ -196,9 +227,14 @@ export const clearChannelCache = (channelUrl: string): void => {
     // Remove from metadata
     const metadataStr = localStorage.getItem(CACHE_METADATA_KEY);
     if (metadataStr) {
-      const metadata: CacheMetadata = JSON.parse(metadataStr);
-      delete metadata[channelUrl];
-      localStorage.setItem(CACHE_METADATA_KEY, JSON.stringify(metadata));
+      try {
+        const metadata: CacheMetadata = JSON.parse(metadataStr);
+        delete metadata[channelUrl];
+        localStorage.setItem(CACHE_METADATA_KEY, JSON.stringify(metadata));
+      } catch (parseError) {
+        console.error('❌ Failed to parse cache metadata (corrupted JSON). Clearing all metadata...', parseError);
+        localStorage.removeItem(CACHE_METADATA_KEY);
+      }
     }
 
     console.log(`🗑️ Cleared cache for ${channelUrl}`);
@@ -257,8 +293,12 @@ export const exportAllCacheData = (): { [channelUrl: string]: CachedChannelData 
       if (key.startsWith(CACHE_KEY_PREFIX)) {
         const cached = localStorage.getItem(key);
         if (cached) {
-          const data: CachedChannelData = JSON.parse(cached);
-          allCacheData[data.channelUrl] = data;
+          try {
+            const data: CachedChannelData = JSON.parse(cached);
+            allCacheData[data.channelUrl] = data;
+          } catch (parseError) {
+            console.error(`❌ Failed to parse cached data for key ${key} (corrupted JSON). Skipping...`, parseError);
+          }
         }
       }
     });
