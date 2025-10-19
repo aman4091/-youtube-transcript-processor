@@ -66,8 +66,8 @@ export const getCachedVideos = (channelUrl: string): YouTubeVideo[] => {
     try {
       data = JSON.parse(cached);
     } catch (error) {
-      console.error('❌ Failed to parse cached data (corrupted JSON). Clearing cache...', error);
-      clearChannelCache(channelUrl);
+      console.error('❌ CRITICAL: Corrupted JSON detected in cache! Clearing ALL cache for safety...', error);
+      clearAllVideoCache(); // Nuclear option - clear everything
       return [];
     }
 
@@ -91,21 +91,57 @@ export const getCachedVideos = (channelUrl: string): YouTubeVideo[] => {
  */
 export const saveCachedVideos = (channelUrl: string, videos: YouTubeVideo[], pageToken?: string): void => {
   try {
+    // Validate videos array
+    if (!Array.isArray(videos)) {
+      console.error('❌ Cannot save cache: videos is not an array');
+      return;
+    }
+
+    // Clean videos array - remove any invalid entries
+    const validVideos = videos.filter(video => {
+      try {
+        return (
+          video &&
+          typeof video === 'object' &&
+          typeof video.videoId === 'string' &&
+          typeof video.title === 'string' &&
+          video.videoId.length > 0
+        );
+      } catch {
+        return false;
+      }
+    });
+
+    if (validVideos.length !== videos.length) {
+      console.warn(`⚠️ Filtered out ${videos.length - validVideos.length} invalid videos before caching`);
+    }
+
     const cacheKey = getCacheKey(channelUrl);
     const data: CachedChannelData = {
       channelUrl,
-      videos,
+      videos: validVideos,
       lastUpdated: new Date().toISOString(),
       pageToken,
-      version: CACHE_VERSION, // Include version for migration
+      version: CACHE_VERSION,
     };
 
-    localStorage.setItem(cacheKey, JSON.stringify(data));
+    // Test if data can be stringified properly
+    const jsonString = JSON.stringify(data);
+
+    // Test if it can be parsed back (validation)
+    try {
+      JSON.parse(jsonString);
+    } catch (parseError) {
+      console.error('❌ Generated cache data is invalid JSON, aborting save:', parseError);
+      return;
+    }
+
+    localStorage.setItem(cacheKey, jsonString);
 
     // Update metadata
-    updateCacheMetadata(channelUrl, videos.length);
+    updateCacheMetadata(channelUrl, validVideos.length);
 
-    console.log(`💾 Saved ${videos.length} videos to cache for ${channelUrl} (v${CACHE_VERSION})${pageToken ? ' (with pageToken)' : ''}`);
+    console.log(`💾 Saved ${validVideos.length} videos to cache for ${channelUrl} (v${CACHE_VERSION})${pageToken ? ' (with pageToken)' : ''}`);
   } catch (error) {
     console.error('Error saving to cache:', error);
   }
