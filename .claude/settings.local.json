@@ -16,7 +16,8 @@
       "Bash(git rm:*)",
       "Bash(git log:*)",
       "Bash(tree:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

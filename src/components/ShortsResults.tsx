@@ -14,10 +14,15 @@ import {
   Send,
   CheckSquare,
   Square,
+  Wand2,
+  Loader2,
+  RotateCcw,
 } from 'lucide-react';
 import { ShortSegment } from '../types/shorts';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { rewriteShortToViral } from '../services/shortsRewriter';
 
 interface ShortsResultsProps {
   shorts: ShortSegment[];
@@ -29,11 +34,17 @@ interface ShortsResultsProps {
 export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: ShortsResultsProps) {
   const { addToQueue } = useTempQueueStore();
   const { getNextCounter } = useScriptCounterStore();
+  const { settings } = useSettingsStore();
 
   const [expandedShorts, setExpandedShorts] = useState<Set<number>>(new Set());
   const [selectedShorts, setSelectedShorts] = useState<Set<number>>(new Set());
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+
+  // Rewrite states
+  const [rewrittenScripts, setRewrittenScripts] = useState<Map<number, string>>(new Map());
+  const [rewritingIndices, setRewritingIndices] = useState<Set<number>>(new Set());
+  const [rewriteErrors, setRewriteErrors] = useState<Map<number, string>>(new Map());
 
   const toggleExpand = (index: number) => {
     const newExpanded = new Set(expandedShorts);
@@ -73,7 +84,79 @@ export default function ShortsResults({ shorts, videoUrl, videoTitle, onBack }: 
     setSelectedShorts(new Set());
   };
 
-  const formatShortForQueue = (short: ShortSegment): string => {
+  // Rewrite a single short with AI
+  const handleRewriteShort = async (index: number) => {
+    // Check DeepSeek API key
+    if (!settings.deepSeekApiKey) {
+      const newErrors = new Map(rewriteErrors);
+      newErrors.set(index, 'DeepSeek API key not configured. Please add it in Settings.');
+      setRewriteErrors(newErrors);
+      return;
+    }
+
+    const short = shorts[index];
+
+    // Mark as rewriting
+    const newRewriting = new Set(rewritingIndices);
+    newRewriting.add(index);
+    setRewritingIndices(newRewriting);
+
+    // Clear previous error
+    const newErrors = new Map(rewriteErrors);
+    newErrors.delete(index);
+    setRewriteErrors(newErrors);
+
+    try {
+      console.log(`🎬 Rewriting short #${index + 1}: "${short.title}"`);
+      const rewrittenScript = await rewriteShortToViral(short, settings.deepSeekApiKey);
+
+      // Save rewritten script
+      const newRewritten = new Map(rewrittenScripts);
+      newRewritten.set(index, rewrittenScript);
+      setRewrittenScripts(newRewritten);
+
+      console.log(`✅ Short #${index + 1} rewritten successfully`);
+    } catch (error) {
+      console.error(`❌ Failed to rewrite short #${index + 1}:`, error);
+      const newErrors = new Map(rewriteErrors);
+      newErrors.set(index, error instanceof Error ? error.message : 'Unknown error');
+      setRewriteErrors(newErrors);
+    } finally {
+      // Remove from rewriting
+      const newRewriting = new Set(rewritingIndices);
+      newRewriting.delete(index);
+      setRewritingIndices(newRewriting);
+    }
+  };
+
+  // Edit rewritten script
+  const handleEditScript = (index: number, newScript: string) => {
+    const newRewritten = new Map(rewrittenScripts);
+    newRewritten.set(index, newScript);
+    setRewrittenScripts(newRewritten);
+  };
+
+  // Reset to original transcript
+  const handleResetScript = (index: number) => {
+    const newRewritten = new Map(rewrittenScripts);
+    newRewritten.delete(index);
+    setRewrittenScripts(newRewritten);
+
+    const newErrors = new Map(rewriteErrors);
+    newErrors.delete(index);
+    setRewriteErrors(newErrors);
+  };
+
+  const formatShortForQueue = (short: ShortSegment, index: number): string => {
+    // Use rewritten script if available, otherwise use original transcript
+    const scriptContent = rewrittenScripts.has(index)
+      ? rewrittenScripts.get(index)
+      : short.transcript;
+
+    const scriptLabel = rewrittenScripts.has(index)
+      ? '🎬 VIRAL SCRIPT (AI REWRITTEN)'
+      : '📄 TRANSCRIPT';
+
     return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏱️ TIMESTAMP: ${short.startTime} - ${short.endTime} (${short.durationSeconds}s)
 🏆 SCORE: ${short.score}/10 | 📂 CATEGORY: ${short.category.toUpperCase()}
@@ -87,8 +170,8 @@ ${short.description}
 💡 WHY THIS WORKS:
 ${short.reason}
 
-📄 TRANSCRIPT:
-${short.transcript}
+${scriptLabel}:
+${scriptContent}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 `;
@@ -99,20 +182,20 @@ ${short.transcript}
       return;
     }
 
-    // Get selected shorts
-    const selectedShortsData = Array.from(selectedShorts)
-      .map((index) => shorts[index])
-      .sort((a, b) => b.score - a.score); // Sort by score descending
+    // Get selected shorts with their original indices
+    const selectedShortsWithIndices = Array.from(selectedShorts)
+      .map((index) => ({ short: shorts[index], originalIndex: index }))
+      .sort((a, b) => b.short.score - a.short.score); // Sort by score descending
 
     // Format content
     let content = `🎬 VIDEO: ${videoTitle}\n`;
     content += `🔗 URL: ${videoUrl}\n`;
-    content += `✂️ TOTAL SHORTS: ${selectedShortsData.length}\n`;
+    content += `✂️ TOTAL SHORTS: ${selectedShortsWithIndices.length}\n`;
     content += `\n\n`;
 
-    selectedShortsData.forEach((short, idx) => {
+    selectedShortsWithIndices.forEach((item, idx) => {
       content += `SHORT #${idx + 1}\n`;
-      content += formatShortForQueue(short);
+      content += formatShortForQueue(item.short, item.originalIndex);
     });
 
     // Get next counter and add to queue with counter-based filename
@@ -127,7 +210,7 @@ ${short.transcript}
     // Clear selection
     clearSelection();
 
-    console.log(`✅ Added ${selectedShortsData.length} shorts to queue as ${filename}`);
+    console.log(`✅ Added ${selectedShortsWithIndices.length} shorts to queue as ${filename}`);
   };
 
   const getScoreColor = (score: number): string => {
@@ -349,10 +432,72 @@ ${short.transcript}
                     </button>
 
                     {isExpanded && (
-                      <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-900 rounded-lg max-h-48 overflow-y-auto">
-                        <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
-                          {short.transcript}
-                        </p>
+                      <div className="mt-3 space-y-3">
+                        {/* Original Transcript */}
+                        <div className="p-3 bg-gray-50 dark:bg-gray-900 rounded-lg max-h-48 overflow-y-auto">
+                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 mb-2">
+                            ORIGINAL TRANSCRIPT:
+                          </p>
+                          <p className="text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                            {short.transcript}
+                          </p>
+                        </div>
+
+                        {/* AI Rewrite Section */}
+                        <div className="border-t border-gray-200 dark:border-gray-700 pt-3">
+                          {!rewrittenScripts.has(index) && !rewritingIndices.has(index) && (
+                            <button
+                              onClick={() => handleRewriteShort(index)}
+                              className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-lg transition-all text-sm font-medium shadow-md"
+                            >
+                              <Wand2 className="w-4 h-4" />
+                              Rewrite with AI (DeepSeek)
+                            </button>
+                          )}
+
+                          {rewritingIndices.has(index) && (
+                            <div className="flex items-center justify-center gap-2 p-4 bg-purple-50 dark:bg-purple-900 dark:bg-opacity-20 rounded-lg">
+                              <Loader2 className="w-5 h-5 animate-spin text-purple-600" />
+                              <span className="text-sm text-purple-600 dark:text-purple-400 font-medium">
+                                AI is rewriting... Please wait
+                              </span>
+                            </div>
+                          )}
+
+                          {rewriteErrors.has(index) && (
+                            <div className="p-3 bg-red-50 dark:bg-red-900 dark:bg-opacity-20 rounded-lg border border-red-200 dark:border-red-800">
+                              <p className="text-sm text-red-600 dark:text-red-400">
+                                ❌ {rewriteErrors.get(index)}
+                              </p>
+                            </div>
+                          )}
+
+                          {rewrittenScripts.has(index) && (
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                  ✅ VIRAL SCRIPT (AI REWRITTEN):
+                                </p>
+                                <button
+                                  onClick={() => handleResetScript(index)}
+                                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900 dark:hover:bg-opacity-20 rounded-md transition-colors"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  Reset
+                                </button>
+                              </div>
+                              <textarea
+                                value={rewrittenScripts.get(index) || ''}
+                                onChange={(e) => handleEditScript(index, e.target.value)}
+                                className="w-full px-3 py-2 border-2 border-green-300 dark:border-green-600 rounded-lg bg-green-50 dark:bg-green-900 dark:bg-opacity-10 text-gray-900 dark:text-gray-100 focus:border-green-500 focus:ring-2 focus:ring-green-200 transition-colors resize-y min-h-[120px] text-sm leading-relaxed"
+                                placeholder="Edit your viral script here..."
+                              />
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                💡 Word count: {(rewrittenScripts.get(index) || '').trim().split(/\s+/).length} words
+                              </p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>

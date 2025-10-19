@@ -11,7 +11,6 @@ import TitleConfirmModal from './components/TitleConfirmModal';
 import ManualProcessingModal from './components/ManualProcessingModal';
 import TitleCreationPage from './components/TitleCreationPage';
 import ShortsFinder from './components/ShortsFinder';
-import ShortsRewritePreview from './components/ShortsRewritePreview';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -27,7 +26,6 @@ import {
 import { chunkText } from './utils/chunkingService';
 import { cleanMarkdown } from './utils/markdownCleaner';
 import { sendToTelegram } from './services/telegramAPI';
-import { rewriteAllShorts, extractShortsFromQueueContent, RewriteResult } from './services/shortsRewriter';
 
 interface ProcessingState {
   isProcessing: boolean;
@@ -98,15 +96,6 @@ function App() {
   const { addProcessedLink, saveOutput } = useHistoryStore();
   const { addToQueue, getQueue, clearQueue, getQueueCount, updateGeneratedTitle } = useTempQueueStore();
   const { getNextCounter } = useScriptCounterStore();
-
-  // Shorts rewrite states
-  const [isRewritingShorts, setIsRewritingShorts] = useState(false);
-  const [rewriteProgress, setRewriteProgress] = useState({ current: 0, total: 0 });
-  const [showRewritePreview, setShowRewritePreview] = useState(false);
-  const [rewritePreviewData, setRewritePreviewData] = useState<{
-    rewriteResults: RewriteResult[];
-    queueItems: any[];
-  } | null>(null);
 
   const handleProcess = async (
     url: string,
@@ -857,193 +846,6 @@ function App() {
     await processNextVideo();
   };
 
-  // Handler for rewriting shorts with AI
-  const handleShortsRewrite = async (queueItems: any[]) => {
-    console.log('🎬 Starting shorts rewrite process...');
-
-    // Check DeepSeek API key
-    if (!settings.deepSeekApiKey) {
-      console.error('❌ DeepSeek API key not configured! Please add it in Settings.');
-      alert('Please configure your DeepSeek API key in Settings to use AI rewriting.');
-      return;
-    }
-
-    setIsRewritingShorts(true);
-    setRewriteProgress({ current: 0, total: queueItems.length });
-
-    try {
-      // Extract shorts from all queue items
-      const allShorts: any[] = [];
-      queueItems.forEach((item) => {
-        const extracted = extractShortsFromQueueContent(item.content);
-        allShorts.push(...extracted);
-      });
-
-      console.log(`📄 Extracted ${allShorts.length} shorts from queue`);
-
-      if (allShorts.length === 0) {
-        console.error('❌ No shorts found in queue content');
-        alert('Could not extract shorts from queue. Please check the content format.');
-        setIsRewritingShorts(false);
-        return;
-      }
-
-      // Rewrite all shorts in parallel
-      const rewriteResults = await rewriteAllShorts(
-        allShorts,
-        settings.deepSeekApiKey,
-        (current, total) => {
-          setRewriteProgress({ current, total });
-        }
-      );
-
-      console.log(`✅ Rewrite complete: ${rewriteResults.length} results`);
-
-      // Show preview modal with results
-      setRewritePreviewData({
-        rewriteResults,
-        queueItems,
-      });
-      setShowRewritePreview(true);
-      setIsRewritingShorts(false);
-    } catch (error) {
-      console.error('❌ Error during shorts rewrite:', error);
-      alert(`Error rewriting shorts: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsRewritingShorts(false);
-    }
-  };
-
-  // Handler for approving and sending rewritten shorts
-  const handleApproveRewrittenShorts = async (editedScripts: Map<number, string>) => {
-    console.log('✅ User approved rewritten shorts, updating queue and sending...');
-
-    if (!rewritePreviewData) {
-      console.error('❌ No preview data available');
-      return;
-    }
-
-    const { rewriteResults, queueItems } = rewritePreviewData;
-
-    // Update queue items with edited/rewritten scripts
-    const updatedQueue = [...queueItems];
-
-    // Group shorts by their original queue item
-    // For now, assume all shorts came from queue items with '_shorts.txt' in filename
-    updatedQueue.forEach((item) => {
-      // Find shorts that belong to this queue item
-      const shortsForThisItem = rewriteResults.filter(() => {
-        // This is a simple mapping - in real scenario you'd track which shorts belong to which queue item
-        return true; // For now, update all items
-      });
-
-      if (shortsForThisItem.length > 0 && item.modelName.includes('_shorts.txt')) {
-        // Build new content with rewritten scripts
-        let newContent = '';
-
-        rewriteResults.forEach((result, index) => {
-          const editedScript = editedScripts.get(index) || result.rewrittenScript;
-          const short = result.originalShort;
-
-          newContent += `SHORT #${index + 1}\n`;
-          newContent += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
-          newContent += `⏱️ TIMESTAMP: ${short.startTime}-${short.endTime} (${short.durationSeconds}s)\n`;
-          newContent += `🏆 SCORE: ${short.score}/10\n`;
-          newContent += `📂 CATEGORY: ${short.category}\n\n`;
-          newContent += `📌 TITLE:\n${short.title}\n\n`;
-          newContent += `📝 DESCRIPTION:\n${short.description}\n\n`;
-          newContent += `💡 WHY THIS WORKS:\n${short.reason}\n\n`;
-          newContent += `🎬 VIRAL SCRIPT (REWRITTEN):\n${editedScript}\n\n`;
-          newContent += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-        });
-
-        item.content = newContent.trim();
-      }
-    });
-
-    // Close preview modal
-    setShowRewritePreview(false);
-    setRewritePreviewData(null);
-
-    // Now send to Telegram using existing push logic
-    // We'll directly call the send logic here
-    await sendRewrittenShortsToTelegram(updatedQueue);
-  };
-
-  // Helper to send rewritten shorts to Telegram
-  const sendRewrittenShortsToTelegram = async (queueItems: any[]) => {
-    console.log(`📤 Sending ${queueItems.length} rewritten shorts to Telegram...`);
-
-    setProcessingState({
-      isProcessing: true,
-      status: `Pushing to Telegram (0/${queueItems.length})...`,
-    });
-
-    let successCount = 0;
-    let failCount = 0;
-    let errors: string[] = [];
-
-    for (let i = 0; i < queueItems.length; i++) {
-      const script = queueItems[i];
-      console.log(`\n📤 Sending script ${i + 1}/${queueItems.length}: ${script.modelName}`);
-
-      setProcessingState({
-        isProcessing: true,
-        status: `Pushing to Telegram (${i + 1}/${queueItems.length})...`,
-      });
-
-      try {
-        // Send to Chat ID #1 (script only)
-        console.log(`📤 Sending to Chat #1 (script only)...`);
-        const result1 = await sendToTelegram(
-          settings.telegramBotToken,
-          settings.telegramChatId,
-          script.content,
-          script.modelName,
-          script.videoTitle,
-          script.videoUrl,
-          script.counter
-        );
-
-        if (result1.success) {
-          console.log('✓ Sent to Chat #1 successfully');
-          successCount++;
-        } else {
-          failCount++;
-          errors.push(`Chat #1 - ${script.modelName}: ${result1.error}`);
-          console.error(`✗ Failed Chat #1: ${result1.error}`);
-        }
-
-        // Add delay between scripts
-        if (i < queueItems.length - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1500));
-        }
-      } catch (error) {
-        failCount++;
-        const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-        errors.push(`${script.modelName}: ${errorMsg}`);
-        console.error(`✗ Error sending script:`, error);
-      }
-    }
-
-    // Clear processing status
-    setProcessingState({ isProcessing: false, status: '' });
-
-    // Show results
-    if (failCount === 0) {
-      console.log(`\n✅ All rewritten shorts sent successfully!`);
-      clearQueue();
-      console.log('🗑️ Queue cleared');
-    } else if (successCount > 0) {
-      console.log(`\n⚠️ Partial success: ${successCount} succeeded, ${failCount} failed`);
-      const errorSummary = errors.join('\n');
-      console.error(`Errors:\n${errorSummary}`);
-    } else {
-      console.log(`\n✗ All scripts failed`);
-      const errorSummary = errors.join('\n');
-      console.error(`Errors:\n${errorSummary}`);
-    }
-  };
-
   // Handler for pushing queued scripts to Telegram
   const handlePushToChat = async () => {
     console.log('\n📤 Starting push to Telegram...');
@@ -1064,16 +866,7 @@ function App() {
 
     console.log(`📦 Found ${queue.length} scripts in queue`);
 
-    // Check if queue contains shorts (detect by filename)
-    const hasShorts = queue.some((item) => item.modelName.includes('_shorts.txt'));
-
-    if (hasShorts) {
-      console.log('🎬 Detected shorts in queue - routing to AI rewrite flow');
-      await handleShortsRewrite(queue);
-      return; // Exit early - rewrite flow handles sending
-    }
-
-    // NO CONFIRMATION - just send directly
+    // NO CONFIRMATION - just send directly (shorts are already rewritten in Shorts Finder)
 
     // Show processing status
     setProcessingState({
@@ -1346,41 +1139,6 @@ function App() {
         />
       )}
 
-      {/* Shorts Rewrite Preview Modal */}
-      {showRewritePreview && rewritePreviewData && (
-        <ShortsRewritePreview
-          isOpen={showRewritePreview}
-          rewriteResults={rewritePreviewData.rewriteResults}
-          videoTitle="Shorts Collection"
-          onClose={() => {
-            setShowRewritePreview(false);
-            setRewritePreviewData(null);
-          }}
-          onApprove={handleApproveRewrittenShorts}
-        />
-      )}
-
-      {/* Rewriting Progress Indicator */}
-      {isRewritingShorts && (
-        <div className="fixed inset-0 z-50 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl p-8 max-w-md">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              🎬 Rewriting Shorts with AI...
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">
-              Processing {rewriteProgress.current} of {rewriteProgress.total} shorts
-            </p>
-            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-              <div
-                className="bg-purple-600 h-2 rounded-full transition-all duration-300"
-                style={{
-                  width: `${rewriteProgress.total > 0 ? (rewriteProgress.current / rewriteProgress.total) * 100 : 0}%`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
