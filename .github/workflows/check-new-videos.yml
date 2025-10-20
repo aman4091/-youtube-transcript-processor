@@ -1,0 +1,32 @@
+name: Check New Videos
+
+on:
+  schedule:
+    # Check for new videos every 2 hours
+    - cron: '0 */2 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  check-videos:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for new videos from YouTube channels
+        run: |
+          echo "🔍 Checking for new videos..."
+          response=$(curl -s -w "\n%{http_code}" -X POST \
+            https://oonugywfdtzrcrydmazk.supabase.co/functions/v1/check-new-videos \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9vbnVneXdmZHR6cmNyeWRtYXprIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA4Nzc5MzgsImV4cCI6MjA3NjQ1MzkzOH0.bdZnEMe1TTF7eqjedzXkuC0geqK8DGRY5MOyjR3E9XQ")
+
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | head -n-1)
+
+          echo "HTTP Status: $http_code"
+          echo "Response: $body"
+
+          if [ "$http_code" -eq 200 ]; then
+            echo "✅ Successfully checked for new videos"
+          else
+            echo "❌ Failed with status $http_code"
+            exit 1
+          fi
