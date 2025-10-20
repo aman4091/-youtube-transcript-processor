@@ -4,6 +4,7 @@
 // =====================================================
 
 import { supabase } from './supabaseClient';
+import { getFileContent } from './googleDriveService';
 import type { ScheduledVideo, TelegramSendResult } from '../types/scheduling';
 
 /**
@@ -95,9 +96,15 @@ async function sendVideoToTelegram(
     // Generate filename: YYYY-MM-DD_ChannelName_VideoN.txt
     const filename = `${video.schedule_date}_${sanitizeFilename(video.target_channel_name)}_Video${video.slot_number}.txt`;
 
-    // Get script content (from Google Drive or temp storage)
-    // For now, placeholder content
-    const content = `Video: ${video.video_title}\nVideo ID: ${video.video_id}\nChannel: ${video.target_channel_name}\nSlot: ${video.slot_number}\nType: ${video.video_type}\n\n[Script content will be added by Google Drive integration]`;
+    // Get script content from Google Drive
+    let content = '';
+
+    if (video.processed_script_path) {
+      const driveContent = await getFileContent(video.processed_script_path);
+      content = driveContent || `Error: Failed to fetch script from Google Drive\n\nVideo: ${video.video_title}\nVideo ID: ${video.video_id}`;
+    } else {
+      content = `Error: No script path found\n\nVideo: ${video.video_title}\nVideo ID: ${video.video_id}\nChannel: ${video.target_channel_name}\nSlot: ${video.slot_number}\nType: ${video.video_type}`;
+    }
 
     // Create file blob
     const fileBlob = new Blob([content], { type: 'text/plain' });

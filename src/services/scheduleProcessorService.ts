@@ -7,6 +7,7 @@ import { supabase } from './supabaseClient';
 import { fetchYouTubeTranscript } from './supaDataAPI';
 import { processWithDeepSeek, processWithGeminiFlash } from './aiProcessors';
 import { chunkText } from '../utils/chunkingService';
+import { uploadScheduledVideoScript } from './googleDriveService';
 import type { ScheduledVideo } from '../types/scheduling';
 
 /**
@@ -166,9 +167,21 @@ async function processNewScheduledVideo(
       throw new Error('Processed video not found in monitoring system');
     }
 
-    // Note: Google Drive upload will be handled by googleDriveService
-    // For now, we'll just mark as ready with a placeholder path
-    const drivePath = `Schedule/${video.schedule_date}/${video.target_channel_name}/Video${video.slot_number}.txt`;
+    // Get processed script from processed_videos table
+    const scriptContent = processedVideo.processed_script || processedVideo.ai_output || '';
+
+    // Upload to Google Drive
+    const drivePath = await uploadScheduledVideoScript(
+      video.schedule_date,
+      video.target_channel_name,
+      video.slot_number,
+      video.video_title,
+      scriptContent
+    );
+
+    if (!drivePath) {
+      throw new Error('Failed to upload to Google Drive');
+    }
 
     await supabase
       .from('scheduled_videos')
@@ -269,9 +282,18 @@ async function processOldScheduledVideo(
     // Step 3: Clean markdown
     const cleanedScript = cleanMarkdown(finalScript);
 
-    // Note: Google Drive upload will be handled separately
-    // For now, store script temporarily
-    const drivePath = `Schedule/${video.schedule_date}/${video.target_channel_name}/Video${video.slot_number}.txt`;
+    // Step 4: Upload to Google Drive
+    const drivePath = await uploadScheduledVideoScript(
+      video.schedule_date,
+      video.target_channel_name,
+      video.slot_number,
+      video.video_title,
+      cleanedScript
+    );
+
+    if (!drivePath) {
+      throw new Error('Failed to upload to Google Drive');
+    }
 
     // Update database
     await supabase

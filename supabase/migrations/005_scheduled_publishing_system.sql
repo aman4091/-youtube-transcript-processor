@@ -130,7 +130,10 @@ CREATE TABLE IF NOT EXISTS schedule_config (
   system_start_date DATE,
   system_status TEXT DEFAULT 'active' CHECK (system_status IN ('active', 'paused')),
   google_drive_folder_id TEXT,
+  google_drive_config JSONB, -- {clientId, clientSecret, refreshToken, folderId}
   telegram_channel_id TEXT,
+  telegram_bot_token TEXT,
+  youtube_api_key TEXT,
   last_schedule_generated_date DATE,
   last_pool_refresh_date DATE,
   created_at TIMESTAMP DEFAULT NOW(),
