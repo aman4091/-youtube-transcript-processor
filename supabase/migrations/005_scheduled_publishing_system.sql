@@ -157,21 +157,25 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Apply trigger to all tables
+DROP TRIGGER IF EXISTS update_video_pool_old_updated_at ON video_pool_old;
 CREATE TRIGGER update_video_pool_old_updated_at
   BEFORE UPDATE ON video_pool_old
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_video_pool_new_updated_at ON video_pool_new;
 CREATE TRIGGER update_video_pool_new_updated_at
   BEFORE UPDATE ON video_pool_new
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_scheduled_videos_updated_at ON scheduled_videos;
 CREATE TRIGGER update_scheduled_videos_updated_at
   BEFORE UPDATE ON scheduled_videos
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_schedule_config_updated_at ON schedule_config;
 CREATE TRIGGER update_schedule_config_updated_at
   BEFORE UPDATE ON schedule_config
   FOR EACH ROW
