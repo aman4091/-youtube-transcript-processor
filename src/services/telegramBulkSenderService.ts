@@ -4,7 +4,7 @@
 // =====================================================
 
 import { supabase } from './supabaseClient';
-import { getFileContent } from './googleDriveService';
+import { getFileContent } from './googleDrivePickleService';
 import type { ScheduledVideo, TelegramSendResult } from '../types/scheduling';
 
 /**

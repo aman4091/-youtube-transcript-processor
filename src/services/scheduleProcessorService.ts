@@ -7,7 +7,7 @@ import { supabase } from './supabaseClient';
 import { fetchYouTubeTranscript } from './supaDataAPI';
 import { processWithDeepSeek, processWithGeminiFlash } from './aiProcessors';
 import { chunkText } from '../utils/chunkingService';
-import { uploadScheduledVideoScript } from './googleDriveService';
+import { uploadScheduledVideoScript } from './googleDrivePickleService';
 import type { ScheduledVideo } from '../types/scheduling';
 
 /**

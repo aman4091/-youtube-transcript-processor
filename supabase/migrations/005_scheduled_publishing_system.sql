@@ -23,10 +23,10 @@ CREATE TABLE IF NOT EXISTS video_pool_old (
 );
 
 -- Indexes for old video pool
-CREATE INDEX idx_video_pool_old_video_id ON video_pool_old(video_id);
-CREATE INDEX idx_video_pool_old_status ON video_pool_old(status);
-CREATE INDEX idx_video_pool_old_view_count ON video_pool_old(view_count DESC);
-CREATE INDEX idx_video_pool_old_last_scheduled ON video_pool_old(last_scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_video_pool_old_video_id ON video_pool_old(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_pool_old_status ON video_pool_old(status);
+CREATE INDEX IF NOT EXISTS idx_video_pool_old_view_count ON video_pool_old(view_count DESC);
+CREATE INDEX IF NOT EXISTS idx_video_pool_old_last_scheduled ON video_pool_old(last_scheduled_date);
 
 -- =====================================================
 
@@ -50,10 +50,10 @@ CREATE TABLE IF NOT EXISTS video_pool_new (
 );
 
 -- Indexes for new video pool
-CREATE INDEX idx_video_pool_new_video_id ON video_pool_new(video_id);
-CREATE INDEX idx_video_pool_new_status ON video_pool_new(status);
-CREATE INDEX idx_video_pool_new_added_at ON video_pool_new(added_at DESC);
-CREATE INDEX idx_video_pool_new_last_scheduled ON video_pool_new(last_scheduled_date);
+CREATE INDEX IF NOT EXISTS idx_video_pool_new_video_id ON video_pool_new(video_id);
+CREATE INDEX IF NOT EXISTS idx_video_pool_new_status ON video_pool_new(status);
+CREATE INDEX IF NOT EXISTS idx_video_pool_new_added_at ON video_pool_new(added_at DESC);
+CREATE INDEX IF NOT EXISTS idx_video_pool_new_last_scheduled ON video_pool_new(last_scheduled_date);
 
 -- =====================================================
 
@@ -87,11 +87,11 @@ CREATE TABLE IF NOT EXISTS scheduled_videos (
 );
 
 -- Indexes for scheduled videos
-CREATE INDEX idx_scheduled_videos_date ON scheduled_videos(schedule_date);
-CREATE INDEX idx_scheduled_videos_status ON scheduled_videos(status);
-CREATE INDEX idx_scheduled_videos_date_status ON scheduled_videos(schedule_date, status);
-CREATE INDEX idx_scheduled_videos_video_id ON scheduled_videos(video_id);
-CREATE INDEX idx_scheduled_videos_channel ON scheduled_videos(target_channel_id, schedule_date);
+CREATE INDEX IF NOT EXISTS idx_scheduled_videos_date ON scheduled_videos(schedule_date);
+CREATE INDEX IF NOT EXISTS idx_scheduled_videos_status ON scheduled_videos(status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_videos_date_status ON scheduled_videos(schedule_date, status);
+CREATE INDEX IF NOT EXISTS idx_scheduled_videos_video_id ON scheduled_videos(video_id);
+CREATE INDEX IF NOT EXISTS idx_scheduled_videos_channel ON scheduled_videos(target_channel_id, schedule_date);
 
 -- =====================================================
 
@@ -110,10 +110,10 @@ CREATE TABLE IF NOT EXISTS video_usage_tracker (
 );
 
 -- Indexes for usage tracker
-CREATE INDEX idx_usage_tracker_video_id ON video_usage_tracker(video_id);
-CREATE INDEX idx_usage_tracker_date ON video_usage_tracker(used_date DESC);
-CREATE INDEX idx_usage_tracker_channel ON video_usage_tracker(target_channel_id);
-CREATE INDEX idx_usage_tracker_video_channel ON video_usage_tracker(video_id, target_channel_id, used_date DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_tracker_video_id ON video_usage_tracker(video_id);
+CREATE INDEX IF NOT EXISTS idx_usage_tracker_date ON video_usage_tracker(used_date DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_tracker_channel ON video_usage_tracker(target_channel_id);
+CREATE INDEX IF NOT EXISTS idx_usage_tracker_video_channel ON video_usage_tracker(video_id, target_channel_id, used_date DESC);
 
 -- =====================================================
 
