@@ -1,0 +1,22 @@
+name: Process Scheduled Videos
+
+on:
+  schedule:
+    # Run every 4 hours
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  process-videos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Process pending scheduled videos
+        run: |
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/process-scheduled-videos" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json"
+
+      - name: Log completion
+        run: echo "Scheduled videos processed at $(date)"

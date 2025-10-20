@@ -1,0 +1,22 @@
+name: Generate Daily Schedule
+
+on:
+  schedule:
+    # Run at 2:00 AM UTC daily
+    - cron: '0 2 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  generate-schedule:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate tomorrow's schedule
+        run: |
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/generate-daily-schedule" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json"
+
+      - name: Log completion
+        run: echo "Daily schedule generated successfully at $(date)"

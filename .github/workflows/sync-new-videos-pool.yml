@@ -1,0 +1,22 @@
+name: Sync New Videos Pool
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  sync-new-videos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Sync new videos from monitoring system
+        run: |
+          curl -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/sync-new-videos-pool" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json"
+
+      - name: Log completion
+        run: echo "New videos pool synced at $(date)"
