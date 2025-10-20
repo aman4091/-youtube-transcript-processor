@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Youtube, Settings as SettingsIcon, History, Send, Sparkles, Scissors } from 'lucide-react';
+import { Youtube, Settings as SettingsIcon, History, Send, Sparkles, Scissors, Activity, Calendar, Clock } from 'lucide-react';
 import { isValidYouTubeUrl } from '../utils/linkValidator';
 import { useHistoryStore } from '../stores/historyStore';
 
@@ -9,13 +9,16 @@ interface InputSectionProps {
   onOpenHistory: () => void;
   onOpenShortsFinder: () => void;
   onOpenTitlePage: () => void;
+  onOpenMonitoring: () => void;
+  onOpenScheduleToday?: () => void;
+  onOpenScheduleCalendar?: () => void;
   onGoHome?: () => void;
   onPushToChat?: () => void;
   queueCount?: number;
   isProcessing: boolean;
 }
 
-export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onOpenShortsFinder, onOpenTitlePage, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
+export default function InputSection({ onProcess, onOpenSettings, onOpenHistory, onOpenShortsFinder, onOpenTitlePage, onOpenMonitoring, onOpenScheduleToday, onOpenScheduleCalendar, onGoHome, onPushToChat, queueCount = 0, isProcessing }: InputSectionProps) {
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
   const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
@@ -106,6 +109,37 @@ export default function InputSection({ onProcess, onOpenSettings, onOpenHistory,
                 <Sparkles className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
                 <span>Title</span>
               </button>
+
+              <button
+                onClick={onOpenMonitoring}
+                className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+              >
+                <Activity className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span className="hidden sm:inline">Monitoring</span>
+                <span className="sm:hidden">Monitor</span>
+              </button>
+
+              {onOpenScheduleToday && (
+                <button
+                  onClick={onOpenScheduleToday}
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+                >
+                  <Clock className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                  <span className="hidden sm:inline">Schedule Today</span>
+                  <span className="sm:hidden">Today</span>
+                </button>
+              )}
+
+              {onOpenScheduleCalendar && (
+                <button
+                  onClick={onOpenScheduleCalendar}
+                  className="flex items-center gap-1.5 px-3 sm:px-4 py-3 sm:py-3.5 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 font-medium text-sm transition-all whitespace-nowrap"
+                >
+                  <Calendar className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                  <span className="hidden sm:inline">Schedule Calendar</span>
+                  <span className="sm:hidden">Calendar</span>
+                </button>
+              )}
 
               <button
                 onClick={onOpenSettings}

@@ -12,6 +12,8 @@ import ManualProcessingModal from './components/ManualProcessingModal';
 import TitleCreationPage from './components/TitleCreationPage';
 import ShortsFinder from './components/ShortsFinder';
 import MonitoringDashboard from './components/MonitoringDashboard';
+import ScheduleToday from './components/ScheduleToday';
+import ScheduleCalendar from './components/ScheduleCalendar';
 import { useSettingsStore } from './stores/settingsStore';
 import { useHistoryStore } from './stores/historyStore';
 import { useTempQueueStore } from './stores/tempQueueStore';
@@ -56,6 +58,8 @@ function App() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [showTitleCreationPage, setShowTitleCreationPage] = useState(false);
   const [showShortsFinder, setShowShortsFinder] = useState(false);
+  const [showScheduleToday, setShowScheduleToday] = useState(false);
+  const [showScheduleCalendar, setShowScheduleCalendar] = useState(false);
   const [processingState, setProcessingState] = useState<ProcessingState>({
     isProcessing: false,
     status: '',
@@ -998,6 +1002,16 @@ function App() {
     }
   };
 
+  // If Schedule Today is open
+  if (showScheduleToday) {
+    return <ScheduleToday />;
+  }
+
+  // If Schedule Calendar is open
+  if (showScheduleCalendar) {
+    return <ScheduleCalendar />;
+  }
+
   // If shorts finder is open, show only shorts finder page
   if (showShortsFinder) {
     return (
@@ -1078,6 +1092,9 @@ function App() {
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenShortsFinder={() => setShowShortsFinder(true)}
         onOpenTitlePage={() => setShowTitleCreationPage(true)}
+        onOpenMonitoring={() => setShowMonitoringPage(true)}
+        onOpenScheduleToday={() => setShowScheduleToday(true)}
+        onOpenScheduleCalendar={() => setShowScheduleCalendar(true)}
         onGoHome={() => {
           // Clear all processing states and go back to homepage
           setResults(null);
@@ -1087,6 +1104,8 @@ function App() {
           setShowTitleGenerator(false);
           setShowManualModal(false);
           setShowTitleCreationPage(false);
+          setShowScheduleToday(false);
+          setShowScheduleCalendar(false);
           setProcessingState({ isProcessing: false, status: '' });
         }}
         onPushToChat={handlePushToChat}

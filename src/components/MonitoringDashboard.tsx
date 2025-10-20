@@ -25,6 +25,7 @@ import {
   syncSettingsToSupabase,
   triggerManualCheck,
   toggleMonitoring,
+  processPendingVideos,
 } from '../services/monitoringService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
 import type {
@@ -62,6 +63,7 @@ export default function MonitoringDashboard({
   const [isLoading, setIsLoading] = useState(true);
   const [isToggling, setIsToggling] = useState(false);
   const [isManualChecking, setIsManualChecking] = useState(false);
+  const [isProcessingPending, setIsProcessingPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -199,6 +201,30 @@ export default function MonitoringDashboard({
     } catch (err: any) {
       console.error('Error syncing settings:', err);
       setError(err.message);
+    }
+  };
+
+  const handleProcessPending = async () => {
+    try {
+      setIsProcessingPending(true);
+      setError(null);
+
+      const result = await processPendingVideos();
+
+      setSuccessMessage(
+        `Processed ${result.processed || 0} videos! ${result.failed ? `(${result.failed} failed)` : ''}`
+      );
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(null), 5000);
+
+      // Reload data
+      await loadAllData();
+    } catch (err: any) {
+      console.error('Error processing pending videos:', err);
+      setError(err.message);
+    } finally {
+      setIsProcessingPending(false);
     }
   };
 
@@ -405,6 +431,19 @@ export default function MonitoringDashboard({
                     <RefreshCw className="w-4 h-4" />
                   )}
                   <span>Manual Check Now</span>
+                </button>
+
+                <button
+                  onClick={handleProcessPending}
+                  disabled={isProcessingPending}
+                  className="flex items-center gap-2 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isProcessingPending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <PlayCircle className="w-4 h-4" />
+                  )}
+                  <span>Process Pending</span>
                 </button>
 
                 <button

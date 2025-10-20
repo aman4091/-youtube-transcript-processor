@@ -31,6 +31,18 @@ interface YouTubeVideo {
 }
 
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, content-type',
+      },
+    });
+  }
+
   try {
     console.log('🔍 Starting check-new-videos cron job...');
     const startTime = Date.now();
@@ -57,7 +69,13 @@ serve(async (req) => {
       console.log('⏸️ Monitoring is disabled. Skipping check.');
       return new Response(
         JSON.stringify({ message: 'Monitoring disabled', skipped: true }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
       );
     }
 
@@ -75,7 +93,13 @@ serve(async (req) => {
       console.log('⚠️ No source channels configured');
       return new Response(
         JSON.stringify({ message: 'No channels to monitor', skipped: true }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
       );
     }
 
@@ -245,7 +269,13 @@ serve(async (req) => {
         errors: channelErrors,
         duration_ms: duration,
       }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
+      {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
     );
   } catch (error: any) {
     console.error('❌ Fatal error in check-new-videos:', error);
@@ -256,7 +286,13 @@ serve(async (req) => {
         error: error.message,
         stack: error.stack,
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
     );
   }
 });

@@ -294,6 +294,41 @@ export async function triggerManualCheck(): Promise<any> {
 }
 
 /**
+ * Trigger processing of pending videos
+ */
+export async function processPendingVideos(): Promise<any> {
+  try {
+    if (!isSupabaseConfigured()) {
+      throw new Error('Supabase not configured');
+    }
+
+    console.log('🔄 Triggering pending videos processor...');
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const response = await fetch(`${supabaseUrl}/functions/v1/process-pending-videos`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to process pending videos');
+    }
+
+    const data = await response.json();
+    console.log('✅ Pending videos processor triggered:', data);
+
+    return data;
+  } catch (error: any) {
+    console.error('❌ Error triggering pending videos processor:', error);
+    throw error;
+  }
+}
+
+/**
  * Get current auto-monitor settings from database
  */
 export async function getAutoMonitorSettings(): Promise<AutoMonitorSettings | null> {

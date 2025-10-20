@@ -19,10 +19,23 @@ interface MonitorSettings {
   openrouter_model: string;
   telegram_bot_token: string;
   telegram_chat_id: string;
+  telegram_chat_id_with_title?: string; // Chat 2 for auto-monitoring
   delay_between_videos_seconds: number;
 }
 
 serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'authorization, content-type',
+      },
+    });
+  }
+
   try {
     console.log('🎬 Starting process-video function...');
     const startTime = Date.now();
@@ -34,7 +47,13 @@ serve(async (req) => {
     if (!video_id) {
       return new Response(
         JSON.stringify({ error: 'video_id is required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
       );
     }
 
@@ -70,7 +89,13 @@ serve(async (req) => {
       console.error('❌ Video not found in queue');
       return new Response(
         JSON.stringify({ error: 'Video not found in queue' }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 404,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
       );
     }
 
@@ -93,9 +118,9 @@ serve(async (req) => {
 
       console.log(`✓ Transcript fetched: ${transcript.length} characters`);
 
-      // Step 4: Process with AI
+      // Step 4: Process with AI (with chunking for large transcripts)
       console.log(`🤖 Processing with AI model: ${monitorSettings.ai_model}`);
-      const aiOutput = await processWithAI(
+      const aiOutput = await processWithAIChunked(
         transcript,
         monitorSettings.custom_prompt ||
           'Summarize the following video transcript in an engaging way:',
@@ -109,9 +134,15 @@ serve(async (req) => {
 
       // Step 6: Send to Telegram
       console.log('📤 Sending to Telegram...');
+
+      // Use Chat 2 (with title) for auto-monitoring, fallback to Chat 1
+      const targetChatId = monitorSettings.telegram_chat_id_with_title || monitorSettings.telegram_chat_id;
+
+      console.log(`📱 Sending to ${monitorSettings.telegram_chat_id_with_title ? 'Chat 2 (with title)' : 'Chat 1 (default)'}...`);
+
       const telegramResult = await sendToTelegram(
         monitorSettings.telegram_bot_token,
-        monitorSettings.telegram_chat_id,
+        targetChatId,
         cleanedOutput,
         videoTitle,
         videoUrl,
@@ -158,7 +189,13 @@ serve(async (req) => {
           telegram_message_id: telegramResult.messageId,
           duration_ms: duration,
         }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } }
+        {
+          status: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
       );
     } catch (processingError: any) {
       console.error('❌ Processing failed:', processingError.message);
@@ -228,7 +265,13 @@ serve(async (req) => {
         error: error.message,
         stack: error.stack,
       }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
+      {
+        status: 500,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+        }
+      }
     );
   }
 });
@@ -244,30 +287,178 @@ async function fetchTranscript(
   videoUrl: string,
   apiKey: string
 ): Promise<string> {
-  const response = await fetch('https://api.supadataapi.com/transcript', {
-    method: 'POST',
+  // Build URL with query parameters
+  const url = new URL('https://api.supadata.ai/v1/transcript');
+  url.searchParams.set('url', videoUrl);
+  url.searchParams.set('text', 'true');
+  url.searchParams.set('mode', 'auto');
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      'x-api-key': apiKey,
+      'Accept': 'application/json',
     },
-    body: JSON.stringify({ url: videoUrl }),
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('SupaData API key is invalid or expired');
+    }
+    if (response.status === 429) {
+      throw new Error('SupaData API rate limit exceeded');
+    }
     throw new Error(`SupaData API error: ${response.statusText}`);
   }
 
   const data = await response.json();
 
-  if (!data.transcript) {
-    throw new Error('No transcript available');
+  // Handle async job (202 status)
+  if (response.status === 202) {
+    const jobId = data.jobId;
+    if (!jobId) {
+      throw new Error('SupaData returned 202 but no job ID');
+    }
+    return await pollJobResult(jobId, apiKey);
   }
 
-  return data.transcript;
+  // Direct response - handle multiple possible field names
+  const transcript = data.content || data.text || data.transcript || '';
+
+  if (!transcript) {
+    throw new Error('No transcript available - video may not have captions');
+  }
+
+  return transcript.trim();
 }
 
 /**
- * Process transcript with AI model
+ * Poll for async job completion (for large videos)
+ */
+async function pollJobResult(jobId: string, apiKey: string): Promise<string> {
+  const maxAttempts = 60; // 5 minutes max
+  let attempt = 0;
+
+  while (attempt < maxAttempts) {
+    await new Promise((resolve) => setTimeout(resolve, 5000)); // Wait 5 seconds
+
+    const pollUrl = `https://api.supadata.ai/v1/transcript/${jobId}`;
+    const response = await fetch(pollUrl, {
+      method: 'GET',
+      headers: {
+        'x-api-key': apiKey,
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Job polling error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const { status, content, error } = data;
+
+    if (status === 'completed') {
+      if (!content) {
+        throw new Error('Job completed but no transcript content returned');
+      }
+      return content;
+    } else if (status === 'failed') {
+      throw new Error(`SupaData job failed: ${error || 'Unknown error'}`);
+    }
+
+    // Continue polling if queued/active
+    attempt++;
+  }
+
+  throw new Error('Job polling timeout - video processing took too long');
+}
+
+/**
+ * Chunk text into smaller pieces at sentence boundaries
+ */
+function chunkText(text: string, maxChars: number = 7000): string[] {
+  if (text.length <= maxChars) {
+    return [text];
+  }
+
+  const chunks: string[] = [];
+  let currentIndex = 0;
+
+  while (currentIndex < text.length) {
+    let endIndex = currentIndex + maxChars;
+
+    if (endIndex >= text.length) {
+      chunks.push(text.substring(currentIndex).trim());
+      break;
+    }
+
+    // Look for nearest full stop
+    let fullStopIndex = text.indexOf('.', endIndex);
+
+    if (fullStopIndex === -1 || fullStopIndex > currentIndex + maxChars + 500) {
+      for (let i = endIndex; i > currentIndex; i--) {
+        if (text[i] === '.') {
+          fullStopIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (fullStopIndex !== -1 && fullStopIndex > currentIndex) {
+      endIndex = fullStopIndex + 1;
+    }
+
+    chunks.push(text.substring(currentIndex, endIndex).trim());
+    currentIndex = endIndex;
+  }
+
+  return chunks;
+}
+
+/**
+ * Process transcript with AI (with chunking support)
+ */
+async function processWithAIChunked(
+  transcript: string,
+  prompt: string,
+  settings: MonitorSettings
+): Promise<string> {
+  // Split into chunks if too large
+  const chunks = chunkText(transcript, 7000);
+
+  console.log(`📦 Split transcript into ${chunks.length} chunks`);
+
+  if (chunks.length === 1) {
+    // Single chunk - process directly
+    return await processWithAI(transcript, prompt, settings);
+  }
+
+  // Multiple chunks - process each and merge
+  const processedChunks: string[] = [];
+
+  for (let i = 0; i < chunks.length; i++) {
+    console.log(`🔄 Processing chunk ${i + 1}/${chunks.length}...`);
+
+    const chunkPrompt = `${prompt}\n\n[Part ${i + 1} of ${chunks.length}]`;
+    const processed = await processWithAI(chunks[i], chunkPrompt, settings);
+
+    processedChunks.push(processed);
+
+    // Small delay between chunks to avoid rate limiting
+    if (i < chunks.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  console.log(`✅ All ${chunks.length} chunks processed, merging...`);
+
+  // Merge all processed chunks
+  return processedChunks.join('\n\n');
+}
+
+/**
+ * Process transcript with AI model (single chunk)
  */
 async function processWithAI(
   transcript: string,

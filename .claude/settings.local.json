@@ -20,7 +20,20 @@
       "Bash(npm install:*)",
       "Bash(echo $HOME)",
       "Read(//c/Users/aaman/.claude/**)",
-      "Bash(cat \"/c/Users/aaman/.claude/INSTRUCTIONS.md\")"
+      "Bash(cat \"/c/Users/aaman/.claude/INSTRUCTIONS.md\")",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(if exist dist rmdir /s /q dist)",
+      "Bash(if exist .vite rmdir /s /q .vite)",
+      "Bash(npm run dev -- --port 5174 --force --host)",
+      "Bash(npx vite --port 5174 --force --host)",
+      "Bash(cat package.json)",
+      "Bash(npx vite preview --port 4173 --host)",
+      "Bash(supabase functions deploy check-new-videos --project-ref oonugywfdtzrcrydmazk)",
+      "Bash(supabase functions deploy generate-daily-schedule --project-ref oonugywfdtzrcrydmazk)",
+      "Bash(supabase functions deploy process-scheduled-videos --project-ref oonugywfdtzrcrydmazk)",
+      "Bash(supabase functions deploy sync-new-videos-pool --project-ref oonugywfdtzrcrydmazk)",
+      "Bash(supabase functions deploy refresh-old-video-pool --project-ref oonugywfdtzrcrydmazk)",
+      "Bash(supabase functions deploy bulk-push-to-telegram --project-ref oonugywfdtzrcrydmazk)"
     ],
     "deny": [],
     "ask": []
