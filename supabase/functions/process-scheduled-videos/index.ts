@@ -187,76 +187,89 @@ async function processChunkWithTimeout(
 // Process old video with full pipeline and resume capability
 async function processOldVideo(video: any, settings: any, supabase: any) {
   try {
-    // Fetch transcript with API key rotation
     const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
     const transcript = await fetchTranscriptWithRotation(videoUrl, settings);
     console.log(`Transcript fetched: ${transcript.length} chars`);
 
-    // Split into chunks (7000 chars - optimized for parallel processing)
     const chunks = chunkText(transcript, 7000);
-    console.log(`Split into ${chunks.length} chunks`);
+    const totalChunks = chunks.length;
+    console.log(`Split into ${totalChunks} chunks`);
 
-    console.log(`⚡ Starting PARALLEL AI processing...`);
-    console.log(`📊 AI Model: ${settings.ai_model || 'gemini-flash'}`);
-    console.log(`🔑 API Key exists: ${!!settings.gemini_api_key}`);
-    console.log(`🚀 Processing ${chunks.length} chunks in PARALLEL!`);
+    const existingResults = video.chunk_results || [];
+    const completedIndices = new Set(existingResults.map((r: any) => r.index));
+    console.log(`📦 Found ${existingResults.length} previously completed chunks`);
+    console.log(`🚀 Processing ${totalChunks - existingResults.length} NEW chunks!`);
 
-    // Process all chunks in parallel using Promise.all
+    await supabase.from('scheduled_videos').update({ total_chunks: totalChunks }).eq('id', video.id);
+
     const chunkPromises = chunks.map(async (chunk, i) => {
-      const chunkIndex = i + 1;
-      console.log(`[CHUNK ${chunkIndex}/${chunks.length}] Starting (${chunk.length} chars)...`);
+      if (completedIndices.has(i)) {
+        console.log(`⏭️ [${i + 1}/${totalChunks}] Skipping (already done)`);
+        const existing = existingResults.find((r: any) => r.index === i);
+        return { index: i, content: existing.content, status: 'skipped' };
+      }
+
+      console.log(`[${i + 1}/${totalChunks}] Starting...`);
 
       const chunkPrompt = settings.custom_prompt || 'Process this transcript:';
-      const fullPrompt =
-        chunks.length > 1
-          ? `${chunkPrompt}\n\n[Part ${chunkIndex} of ${chunks.length}]`
-          : chunkPrompt;
+      const fullPrompt = totalChunks > 1 ? `${chunkPrompt}\n\n[Part ${i + 1} of ${totalChunks}]` : chunkPrompt;
+
+      const processingPromise = (async () => {
+        let aiResult;
+        if (settings.ai_model === 'deepseek') {
+          aiResult = await processWithDeepSeek(fullPrompt, chunk, settings.deepseek_api_key);
+        } else {
+          aiResult = await processWithGeminiFlash(fullPrompt, chunk, settings.gemini_api_key);
+        }
+        if (aiResult.error) throw new Error(aiResult.error);
+        console.log(`✅ [${i + 1}] Done (${aiResult.content.length} chars)`);
+        return { index: i, content: aiResult.content };
+      })();
 
       try {
-        let aiResult;
-
-        if (settings.ai_model === 'deepseek') {
-          console.log(`[CHUNK ${chunkIndex}] Calling DeepSeek...`);
-          aiResult = await processWithDeepSeek(
-            fullPrompt,
-            chunk,
-            settings.deepseek_api_key
-          );
-        } else {
-          console.log(`[CHUNK ${chunkIndex}] Calling Gemini Flash...`);
-          aiResult = await processWithGeminiFlash(
-            fullPrompt,
-            chunk,
-            settings.gemini_api_key
-          );
-        }
-
-        if (aiResult.error) {
-          console.error(`[CHUNK ${chunkIndex}] ERROR: ${aiResult.error}`);
-          throw new Error(`Chunk ${chunkIndex} failed: ${aiResult.error}`);
-        }
-
-        console.log(`✅ [CHUNK ${chunkIndex}] Complete (${aiResult.content.length} chars)`);
-        return aiResult.content;
-
+        const result = await processChunkWithTimeout(processingPromise);
+        return { ...result, status: 'fulfilled' };
       } catch (error: any) {
-        console.error(`💥 [CHUNK ${chunkIndex}] EXCEPTION:`, error.message);
-        throw error;
+        console.error(`❌ [${i + 1}] FAILED:`, error.message);
+        return { index: i, error: error.message, status: 'rejected' };
       }
     });
 
-    // Wait for all chunks to complete in parallel
-    console.log(`⏳ Waiting for all ${chunks.length} chunks to complete in parallel...`);
+    console.log(`⏳ Waiting for chunks (60s timeout per chunk)...`);
     const startTime = Date.now();
-    const processedChunks = await Promise.all(chunkPromises);
+    const results = await Promise.allSettled(chunkPromises);
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
-    console.log(`✅ All ${chunks.length} chunks completed in ${processingTime} seconds!`);
+    const successfulChunks: any[] = [];
+    const failedChunks: number[] = [];
 
-    const finalScript = processedChunks.join('\n\n');
-    console.log(`📝 AI processing complete: ${finalScript.length} chars total`);
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        const chunkData = result.value;
+        if (chunkData.status === 'fulfilled' || chunkData.status === 'skipped') {
+          successfulChunks.push({ index: chunkData.index, content: chunkData.content, processed_at: new Date().toISOString() });
+        } else if (chunkData.status === 'rejected') {
+          failedChunks.push(chunkData.index);
+        }
+      }
+    });
 
-    return { success: true };
+    const allChunkResults = [...existingResults.filter((r: any) => !successfulChunks.find(s => s.index === r.index)), ...successfulChunks];
+    const completedCount = allChunkResults.length;
+
+    console.log(`✅ New: ${successfulChunks.length - existingResults.length} | ❌ Failed: ${failedChunks.length} | Total: ${completedCount}/${totalChunks} | Time: ${processingTime}s`);
+
+    await supabase.from('scheduled_videos').update({ chunk_results: allChunkResults, completed_chunks: completedCount, failed_chunks: failedChunks }).eq('id', video.id);
+
+    if (completedCount === totalChunks) {
+      const sortedResults = allChunkResults.sort((a: any, b: any) => a.index - b.index);
+      const finalScript = sortedResults.map((r: any) => r.content).join('\n\n');
+      console.log(`🎉 ALL COMPLETE! Script: ${finalScript.length} chars`);
+      return { success: true, totalChunks, completedChunks: completedCount };
+    } else {
+      console.log(`⚠️ Partial (${completedCount}/${totalChunks}) - will resume next run`);
+      return { success: false, partialSuccess: true, totalChunks, completedChunks: completedCount, error: `${failedChunks.length} chunks failed` };
+    }
   } catch (error: any) {
     return { success: false, error: error.message };
   }
