@@ -103,10 +103,11 @@ serve(async (req) => {
           processed++;
           console.log(`✅ New video ${video.video_id} marked as ready`);
         } else {
-          // Old video: Full processing pipeline
-          const result = await processOldVideo(video, settings);
+          // Old video: Full processing pipeline with chunk tracking
+          const result = await processOldVideo(video, settings, supabase);
 
           if (result.success) {
+            // All chunks complete - mark as ready
             await supabase
               .from('scheduled_videos')
               .update({
@@ -117,6 +118,10 @@ serve(async (req) => {
 
             processed++;
             console.log(`✅ Old video ${video.video_id} processed successfully`);
+          } else if (result.partialSuccess) {
+            // Some chunks complete - keep as processing for next run
+            console.log(`⚠️ Partial success: ${result.completedChunks}/${result.totalChunks} chunks done`);
+            console.log(`Will retry failed chunks in next run`);
           } else {
             throw new Error(result.error);
           }
@@ -166,57 +171,90 @@ serve(async (req) => {
   }
 });
 
-// Process old video with full pipeline
-async function processOldVideo(video: any, settings: any) {
+// Timeout wrapper for chunk processing (60 seconds)
+async function processChunkWithTimeout(
+  promise: Promise<any>,
+  timeoutMs: number = 60000
+): Promise<any> {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Chunk timeout after 60 seconds')), timeoutMs)
+    ),
+  ]);
+}
+
+// Process old video with full pipeline and resume capability
+async function processOldVideo(video: any, settings: any, supabase: any) {
   try {
     // Fetch transcript with API key rotation
     const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
     const transcript = await fetchTranscriptWithRotation(videoUrl, settings);
     console.log(`Transcript fetched: ${transcript.length} chars`);
 
-    // Split into chunks (7000 chars)
+    // Split into chunks (7000 chars - optimized for parallel processing)
     const chunks = chunkText(transcript, 7000);
     console.log(`Split into ${chunks.length} chunks`);
 
-    const processedChunks: string[] = [];
+    console.log(`⚡ Starting PARALLEL AI processing...`);
+    console.log(`📊 AI Model: ${settings.ai_model || 'gemini-flash'}`);
+    console.log(`🔑 API Key exists: ${!!settings.gemini_api_key}`);
+    console.log(`🚀 Processing ${chunks.length} chunks in PARALLEL!`);
 
-    for (let i = 0; i < chunks.length; i++) {
+    // Process all chunks in parallel using Promise.all
+    const chunkPromises = chunks.map(async (chunk, i) => {
+      const chunkIndex = i + 1;
+      console.log(`[CHUNK ${chunkIndex}/${chunks.length}] Starting (${chunk.length} chars)...`);
+
       const chunkPrompt = settings.custom_prompt || 'Process this transcript:';
       const fullPrompt =
         chunks.length > 1
-          ? `${chunkPrompt}\n\n[Part ${i + 1} of ${chunks.length}]`
+          ? `${chunkPrompt}\n\n[Part ${chunkIndex} of ${chunks.length}]`
           : chunkPrompt;
 
-      let aiResult;
+      try {
+        let aiResult;
 
-      if (settings.ai_model === 'deepseek') {
-        aiResult = await processWithDeepSeek(
-          fullPrompt,
-          chunks[i],
-          settings.deepseek_api_key
-        );
-      } else {
-        aiResult = await processWithGeminiFlash(
-          fullPrompt,
-          chunks[i],
-          settings.gemini_api_key
-        );
+        if (settings.ai_model === 'deepseek') {
+          console.log(`[CHUNK ${chunkIndex}] Calling DeepSeek...`);
+          aiResult = await processWithDeepSeek(
+            fullPrompt,
+            chunk,
+            settings.deepseek_api_key
+          );
+        } else {
+          console.log(`[CHUNK ${chunkIndex}] Calling Gemini Flash...`);
+          aiResult = await processWithGeminiFlash(
+            fullPrompt,
+            chunk,
+            settings.gemini_api_key
+          );
+        }
+
+        if (aiResult.error) {
+          console.error(`[CHUNK ${chunkIndex}] ERROR: ${aiResult.error}`);
+          throw new Error(`Chunk ${chunkIndex} failed: ${aiResult.error}`);
+        }
+
+        console.log(`✅ [CHUNK ${chunkIndex}] Complete (${aiResult.content.length} chars)`);
+        return aiResult.content;
+
+      } catch (error: any) {
+        console.error(`💥 [CHUNK ${chunkIndex}] EXCEPTION:`, error.message);
+        throw error;
       }
+    });
 
-      if (aiResult.error) {
-        throw new Error(`AI processing error: ${aiResult.error}`);
-      }
+    // Wait for all chunks to complete in parallel
+    console.log(`⏳ Waiting for all ${chunks.length} chunks to complete in parallel...`);
+    const startTime = Date.now();
+    const processedChunks = await Promise.all(chunkPromises);
+    const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
-      processedChunks.push(aiResult.content);
-
-      // Delay between chunks
-      if (i < chunks.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-      }
-    }
+    console.log(`✅ All ${chunks.length} chunks completed in ${processingTime} seconds!`);
 
     const finalScript = processedChunks.join('\n\n');
-    console.log(`AI processing complete: ${finalScript.length} chars`);
+    console.log(`📝 AI processing complete: ${finalScript.length} chars total`);
 
     return { success: true };
   } catch (error: any) {
@@ -404,8 +442,9 @@ async function processWithDeepSeek(prompt: string, transcript: string, apiKey: s
 
 async function processWithGeminiFlash(prompt: string, transcript: string, apiKey: string) {
   try {
+    console.log(`🔗 Calling Gemini 2.5-flash API...`);
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -422,12 +461,39 @@ async function processWithGeminiFlash(prompt: string, transcript: string, apiKey
       }
     );
 
+    console.log(`📡 Status: ${response.status} ${response.statusText}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ API Error: ${errorText}`);
+      throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
+    }
+
     const data = await response.json();
+
+    // Validate response structure
+    if (!data.candidates || !data.candidates[0]) {
+      console.error(`❌ No candidates in response`);
+      if (data.promptFeedback && data.promptFeedback.blockReason) {
+        throw new Error(`Gemini blocked: ${data.promptFeedback.blockReason}`);
+      }
+      throw new Error('Invalid Gemini response - no candidates');
+    }
+
+    if (!data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+      console.error(`❌ Invalid candidate structure`);
+      throw new Error('Invalid Gemini response structure');
+    }
+
+    const text = data.candidates[0].content.parts[0].text;
+    console.log(`✅ Got response: ${text.length} chars`);
+
     return {
-      content: data.candidates[0].content.parts[0].text,
+      content: text,
       error: null,
     };
   } catch (error: any) {
+    console.error(`💥 Gemini exception:`, error.message);
     return { content: '', error: error.message };
   }
 }

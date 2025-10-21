@@ -36,7 +36,8 @@
       "Bash(supabase functions deploy bulk-push-to-telegram --project-ref oonugywfdtzrcrydmazk)",
       "Bash(GIT_SEQUENCE_EDITOR=\"sed -i ''s/^pick ab5b11f/edit ab5b11f/''\" git rebase -i 3edc27a)",
       "Bash(git stash:*)",
-      "Bash(supabase functions deploy:*)"
+      "Bash(supabase functions deploy:*)",
+      "Bash(supabase db push:*)"
     ],
     "deny": [],
     "ask": []
