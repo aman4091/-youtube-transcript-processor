@@ -76,72 +76,45 @@ serve(async (req) => {
           })
           .eq('id', video.id);
 
-        if (video.video_type === 'new') {
-          // New video: Already processed by monitoring system
-          const { data: processedVideo } = await supabase
-            .from('processed_videos')
-            .select('*')
-            .eq('video_id', video.video_id)
-            .eq('status', 'success')
-            .order('processed_at', { ascending: false })
-            .limit(1)
-            .single();
+        // Process video (both old and new use same pipeline now)
+        console.log(`Processing ${video.video_type} video: ${video.video_id}`);
+        const result = await processOldVideo(video, settings, supabase);
 
-          if (!processedVideo) {
-            throw new Error('Processed video not found in monitoring system');
+        if (result.success) {
+          // All chunks complete - upload to Google Drive
+          console.log(`📤 Uploading to Google Drive...`);
+          const drivePath = await uploadToGoogleDrive(
+            video.schedule_date,
+            video.target_channel_name,
+            video.slot_number,
+            result.finalScript,
+            supabase
+          );
+
+          if (drivePath) {
+            console.log(`✅ Uploaded to Google Drive: ${drivePath}`);
+          } else {
+            console.log(`⚠️ Google Drive upload failed, continuing anyway`);
           }
 
-          // Mark as ready (Google Drive upload will be handled separately)
+          // Mark as ready
           await supabase
             .from('scheduled_videos')
             .update({
               status: 'ready',
+              processed_script_path: drivePath,
               processing_completed_at: new Date().toISOString(),
             })
             .eq('id', video.id);
 
           processed++;
-          console.log(`✅ New video ${video.video_id} marked as ready`);
+          console.log(`✅ ${video.video_type} video ${video.video_id} processed successfully`);
+        } else if (result.partialSuccess) {
+          // Some chunks complete - keep as processing for next run
+          console.log(`⚠️ Partial success: ${result.completedChunks}/${result.totalChunks} chunks done`);
+          console.log(`Will retry failed chunks in next run`);
         } else {
-          // Old video: Full processing pipeline with chunk tracking
-          const result = await processOldVideo(video, settings, supabase);
-
-          if (result.success) {
-            // All chunks complete - upload to Google Drive
-            console.log(`📤 Uploading to Google Drive...`);
-            const drivePath = await uploadToGoogleDrive(
-              video.schedule_date,
-              video.target_channel_name,
-              video.slot_number,
-              result.finalScript,
-              supabase
-            );
-
-            if (drivePath) {
-              console.log(`✅ Uploaded to Google Drive: ${drivePath}`);
-            } else {
-              console.log(`⚠️ Google Drive upload failed, continuing anyway`);
-            }
-
-            // Mark as ready
-            await supabase
-              .from('scheduled_videos')
-              .update({
-                status: 'ready',
-                processed_script_path: drivePath,
-                processing_completed_at: new Date().toISOString(),
-              })
-              .eq('id', video.id);
-
-            processed++;
-            console.log(`✅ Old video ${video.video_id} processed successfully`);
-          } else if (result.partialSuccess) {
-            // Some chunks complete - keep as processing for next run
-            console.log(`⚠️ Partial success: ${result.completedChunks}/${result.totalChunks} chunks done`);
-            console.log(`Will retry failed chunks in next run`);
-          } else {
-            throw new Error(result.error);
-          }
+          throw new Error(result.error);
         }
 
         // 2 second delay between videos

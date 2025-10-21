@@ -177,78 +177,64 @@ serve(async (req) => {
 
     console.log(`✓ ${filteredVideos.length} videos passed filters`);
 
-    // Step 4: Check which videos are already processed
+    // Step 4: Check which videos are already in pool
     const videoIds = filteredVideos.map((v) => v.videoId);
-    const { data: processedVideos, error: processedError } = await supabase
-      .from('processed_videos')
+    const { data: poolVideos, error: poolError } = await supabase
+      .from('video_pool_new')
       .select('video_id')
       .in('video_id', videoIds);
 
-    if (processedError) {
-      console.error('❌ Error checking processed videos:', processedError);
+    if (poolError) {
+      console.error('❌ Error checking video pool:', poolError);
     }
 
-    const processedVideoIds = new Set(
-      processedVideos?.map((v) => v.video_id) || []
+    const poolVideoIds = new Set(
+      poolVideos?.map((v) => v.video_id) || []
     );
 
     const newVideos = filteredVideos.filter(
-      (v) => !processedVideoIds.has(v.videoId)
+      (v) => !poolVideoIds.has(v.videoId)
     );
 
-    console.log(`🆕 ${newVideos.length} new videos to process`);
+    console.log(`🆕 ${newVideos.length} new videos to add to pool`);
 
-    // Step 5: Add new videos to processing queue
-    let videosQueued = 0;
+    // Step 5: Add new videos directly to video_pool_new (NO AI processing)
+    let videosAdded = 0;
     if (newVideos.length > 0) {
-      const queueEntries = newVideos.map((video) => ({
-        video_id: video.videoId,
-        video_url: video.url,
-        video_title: video.title,
-        channel_id: video.channelId,
-        channel_title: video.channelTitle,
-        priority: 0,
-        status: 'pending',
-      }));
+      // Parse duration to seconds
+      const poolEntries = newVideos.map((video) => {
+        const durationSeconds = parseDuration(video.duration);
+        return {
+          video_id: video.videoId,
+          title: video.title,
+          duration: durationSeconds,
+          view_count: video.viewCount,
+          published_at: video.publishedAt,
+          source_channel_id: video.channelId,
+          times_scheduled: 0,
+          status: 'active',
+        };
+      });
 
-      const { data: queuedData, error: queueError } = await supabase
-        .from('processing_queue')
-        .insert(queueEntries)
+      const { data: addedData, error: addError } = await supabase
+        .from('video_pool_new')
+        .insert(poolEntries)
         .select();
 
-      if (queueError) {
-        console.error('❌ Error adding to queue:', queueError);
-        throw queueError;
+      if (addError) {
+        console.error('❌ Error adding to pool:', addError);
+        throw addError;
       }
 
-      videosQueued = queuedData?.length || 0;
-      console.log(`✅ Queued ${videosQueued} videos for processing`);
-
-      // Trigger process-video function for each queued video
-      // (In production, you'd use a proper queue/worker system)
-      for (const video of newVideos.slice(0, 5)) {
-        // Process first 5 immediately
-        try {
-          await fetch(`${supabaseUrl}/functions/v1/process-video`, {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${supabaseKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ video_id: video.videoId }),
-          });
-        } catch (err: any) {
-          console.error(`❌ Failed to trigger processing for ${video.videoId}:`, err.message);
-        }
-      }
+      videosAdded = addedData?.length || 0;
+      console.log(`✅ Added ${videosAdded} videos to pool (will be processed when scheduled)`);
     }
-
     // Step 6: Log monitoring check
     const duration = Date.now() - startTime;
     await supabase.from('monitoring_logs').insert({
       channels_checked: monitorSettings.source_channels.length,
       new_videos_found: newVideos.length,
-      videos_processed: 0, // Will be updated by process-video function
+      videos_processed: 0, // Videos added to pool, will process when scheduled
       errors: channelErrors.length,
       status: channelErrors.length > 0 ? 'partial_success' : 'success',
       error_details: channelErrors.length > 0 ? { errors: channelErrors } : null,
@@ -265,7 +251,7 @@ serve(async (req) => {
         videos_found: allVideos.length,
         videos_filtered: filteredVideos.length,
         new_videos: newVideos.length,
-        videos_queued: videosQueued,
+        videos_added_to_pool: videosAdded,
         errors: channelErrors,
         duration_ms: duration,
       }),
