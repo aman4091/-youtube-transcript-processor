@@ -181,7 +181,7 @@ export async function uploadScheduledVideoScript(
   scheduleDate: string,
   channelName: string,
   slotNumber: number,
-  videoTitle: string,
+  _videoTitle: string,
   scriptContent: string
 ): Promise<string | null> {
   try {
@@ -242,7 +242,7 @@ export async function uploadScheduledVideoScript(
  */
 export async function uploadNewVideoBackup(
   videoId: string,
-  videoTitle: string,
+  _videoTitle: string,
   scriptContent: string
 ): Promise<string | null> {
   try {

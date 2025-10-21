@@ -6,7 +6,6 @@ import {
   Loader2,
   Send,
   AlertCircle,
-  PlayCircle,
   Youtube,
   History,
 } from 'lucide-react';

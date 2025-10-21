@@ -64,7 +64,7 @@ export async function fetchOldVideosFromYouTube(
     let fetchedCount = 0;
 
     while (fetchedCount < maxResults) {
-      const playlistResponse = await axios.get(
+      const playlistResponse: any = await axios.get(
         `https://www.googleapis.com/youtube/v3/playlistItems`,
         {
           params: {
@@ -371,11 +371,17 @@ export async function markVideoAsUsed(
       console.error('[OldVideoPool] Error adding to usage tracker:', trackerError.message);
     }
 
-    // Update video pool
+    // Update video pool - increment times_scheduled
+    const { data: currentData } = await supabase
+      .from('video_pool_old')
+      .select('times_scheduled')
+      .eq('video_id', videoId)
+      .single();
+
     const { error: poolError } = await supabase
       .from('video_pool_old')
       .update({
-        times_scheduled: supabase.sql`times_scheduled + 1`,
+        times_scheduled: (currentData?.times_scheduled || 0) + 1,
         last_scheduled_date: usedDate,
       })
       .eq('video_id', videoId);
