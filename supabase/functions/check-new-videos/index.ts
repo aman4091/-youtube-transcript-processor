@@ -203,7 +203,8 @@ serve(async (req) => {
     if (newVideos.length > 0) {
       // Parse duration to seconds
       const poolEntries = newVideos.map((video) => {
-        const durationSeconds = parseDuration(video.duration);
+        const durationMinutes = parseDuration(video.duration);
+        const durationSeconds = Math.round(durationMinutes * 60);
         return {
           video_id: video.videoId,
           title: video.title,
