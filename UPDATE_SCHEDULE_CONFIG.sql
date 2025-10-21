@@ -3,8 +3,8 @@
 
 UPDATE schedule_config
 SET
-  source_channel_id = 'UCSbbWXDlbGzYPO3CcwrXweA',
-  source_channel_name = 'God Says',
+  source_channel_id = 'UCSbbWXDlbQzVPO3CcwrXweA',
+  source_channel_name = 'god says today',
   source_channel_url = 'https://www.youtube.com/@godsays32',
 
   youtube_api_key = 'YOUR_YOUTUBE_API_KEY',
