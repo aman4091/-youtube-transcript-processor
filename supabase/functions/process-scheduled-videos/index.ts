@@ -107,11 +107,28 @@ serve(async (req) => {
           const result = await processOldVideo(video, settings, supabase);
 
           if (result.success) {
-            // All chunks complete - mark as ready
+            // All chunks complete - upload to Google Drive
+            console.log(`📤 Uploading to Google Drive...`);
+            const drivePath = await uploadToGoogleDrive(
+              video.schedule_date,
+              video.target_channel_name,
+              video.slot_number,
+              result.finalScript,
+              supabase
+            );
+
+            if (drivePath) {
+              console.log(`✅ Uploaded to Google Drive: ${drivePath}`);
+            } else {
+              console.log(`⚠️ Google Drive upload failed, continuing anyway`);
+            }
+
+            // Mark as ready
             await supabase
               .from('scheduled_videos')
               .update({
                 status: 'ready',
+                processed_script_path: drivePath,
                 processing_completed_at: new Date().toISOString(),
               })
               .eq('id', video.id);
@@ -249,7 +266,7 @@ async function processOldVideo(video: any, settings: any, supabase: any) {
       const sortedResults = allChunkResults.sort((a: any, b: any) => a.index - b.index);
       const finalScript = sortedResults.map((r: any) => r.content).join('\n\n');
       console.log(`🎉 ALL COMPLETE! Script: ${finalScript.length} chars`);
-      return { success: true, totalChunks, completedChunks: completedCount };
+      return { success: true, totalChunks, completedChunks: completedCount, finalScript };
     } else {
       console.log(`⚠️ Partial (${completedCount}/${totalChunks}) - will resume next run`);
       return { success: false, partialSuccess: true, totalChunks, completedChunks: completedCount, error: `${failedChunks.length} chunks failed` };
@@ -492,5 +509,218 @@ async function processWithGeminiFlash(prompt: string, transcript: string, apiKey
   } catch (error: any) {
     console.error(`💥 Gemini exception:`, error.message);
     return { content: '', error: error.message };
+  }
+}
+
+
+// ============================================
+// Google Drive Upload Functions
+// ============================================
+
+/**
+ * Get Google Drive config from database
+ */
+async function getGoogleDriveConfig(supabase: any): Promise<any | null> {
+  try {
+    const { data, error } = await supabase
+      .from('schedule_config')
+      .select('google_drive_config')
+      .eq('user_id', 'default_user')
+      .single();
+
+    if (error || !data || !data.google_drive_config) {
+      console.error('[GoogleDrive] Config not found');
+      return null;
+    }
+
+    return data.google_drive_config;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Error getting config:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Get Google Drive access token
+ */
+async function getAccessToken(config: any): Promise<string | null> {
+  try {
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        refresh_token: config.refreshToken,
+        grant_type: 'refresh_token',
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error_description || 'Failed to get access token');
+    }
+
+    return data.access_token;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Error getting access token:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Create or get existing folder in Google Drive
+ */
+async function createOrGetFolder(
+  folderName: string,
+  parentFolderId: string,
+  accessToken: string
+): Promise<string | null> {
+  try {
+    // Check if folder exists
+    const searchResponse = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${folderName}' and '${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+
+    const searchData = await searchResponse.json();
+
+    if (searchData.files && searchData.files.length > 0) {
+      return searchData.files[0].id;
+    }
+
+    // Create new folder
+    const response = await fetch('https://www.googleapis.com/drive/v3/files', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to create folder');
+    }
+
+    return data.id;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Error creating folder:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Upload file to Google Drive
+ */
+async function uploadFile(
+  fileName: string,
+  content: string,
+  folderId: string,
+  accessToken: string
+): Promise<string | null> {
+  try {
+    const metadata = {
+      name: fileName,
+      parents: [folderId],
+      mimeType: 'text/plain',
+    };
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const multipartRequestBody =
+      delimiter +
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n' +
+      JSON.stringify(metadata) +
+      delimiter +
+      'Content-Type: text/plain\r\n\r\n' +
+      content +
+      closeDelimiter;
+
+    const response = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: multipartRequestBody,
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Failed to upload file');
+    }
+
+    return data.id;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Error uploading file:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Upload script to Google Drive
+ * Structure: /Schedule/YYYY-MM-DD/ChannelName/VideoN.txt
+ */
+async function uploadToGoogleDrive(
+  scheduleDate: string,
+  channelName: string,
+  slotNumber: number,
+  scriptContent: string,
+  supabase: any
+): Promise<string | null> {
+  try {
+    console.log(`[GoogleDrive] Uploading ${scheduleDate}/${channelName}/Video${slotNumber}`);
+
+    const config = await getGoogleDriveConfig(supabase);
+    if (!config) {
+      console.log('[GoogleDrive] Config not found, skipping upload');
+      return null;
+    }
+
+    const accessToken = await getAccessToken(config);
+    if (!accessToken) {
+      console.log('[GoogleDrive] Failed to get access token');
+      return null;
+    }
+
+    // Create folder structure: Schedule/YYYY-MM-DD/ChannelName/
+    const scheduleFolderId = await createOrGetFolder('Schedule', config.folderId, accessToken);
+    if (!scheduleFolderId) return null;
+
+    const dateFolderId = await createOrGetFolder(scheduleDate, scheduleFolderId, accessToken);
+    if (!dateFolderId) return null;
+
+    const channelFolderId = await createOrGetFolder(channelName, dateFolderId, accessToken);
+    if (!channelFolderId) return null;
+
+    // Upload file
+    const fileName = `Video${slotNumber}.txt`;
+    const fileId = await uploadFile(fileName, scriptContent, channelFolderId, accessToken);
+
+    if (!fileId) return null;
+
+    const filePath = `Schedule/${scheduleDate}/${channelName}/${fileName}`;
+    console.log(`[GoogleDrive] ✅ Uploaded: ${filePath}`);
+
+    return filePath;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Upload error:', error.message);
+    return null;
   }
 }
