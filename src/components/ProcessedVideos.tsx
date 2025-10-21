@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { History, Play, Trash2, Youtube, CheckCircle, X } from 'lucide-react';
+import { History, Play, Trash2, Youtube, CheckCircle, X, Calendar } from 'lucide-react';
+import NavigationBar from './NavigationBar';
 import { useHistoryStore } from '../stores/historyStore';
+import { useTempQueueStore } from '../stores/tempQueueStore';
 
 interface ProcessedVideosProps {
   onVideoSelect: (
@@ -13,9 +15,31 @@ interface ProcessedVideosProps {
     targetChannelName?: string
   ) => void;
   onClose: () => void;
+  onNavigateHome?: () => void;
+  onNavigateHistory?: () => void;
+  onNavigateShorts?: () => void;
+  onNavigateTitle?: () => void;
+  onNavigateMonitoring?: () => void;
+  onNavigateSettings?: () => void;
+  onNavigateScheduleToday?: () => void;
+  onNavigateScheduleCalendar?: () => void;
+  onPushToChat?: () => void;
 }
 
-export default function ProcessedVideos({ onVideoSelect, onClose }: ProcessedVideosProps) {
+export default function ProcessedVideos({
+  onVideoSelect,
+  onClose,
+  onNavigateHome,
+  onNavigateHistory,
+  onNavigateShorts,
+  onNavigateTitle,
+  onNavigateMonitoring,
+  onNavigateSettings,
+  onNavigateScheduleToday,
+  onNavigateScheduleCalendar,
+  onPushToChat,
+}: ProcessedVideosProps) {
+  const { getQueueCount } = useTempQueueStore();
   const { processedLinks, clearHistory, removeProcessing, removeVideoCompletely } = useHistoryStore();
 
   const [selectedTargetChannel, setSelectedTargetChannel] = useState<string>('all');
@@ -176,26 +200,21 @@ export default function ProcessedVideos({ onVideoSelect, onClose }: ProcessedVid
       </header>
 
       {/* Navigation Bar */}
-      <nav className="w-full bg-gray-50 dark:bg-gray-900 sticky top-0 z-50 border-b-2 border-gray-200 dark:border-gray-700 shadow-md">
-        <div className="max-w-7xl mx-auto px-3 sm:px-6">
-          <div className="flex items-center gap-1 sm:gap-2">
-            <button
-              onClick={onClose}
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 text-gray-700 dark:text-gray-300 hover:bg-white dark:hover:bg-gray-800 hover:text-blue-600 dark:hover:text-blue-400 transition-colors font-medium text-sm sm:text-base"
-            >
-              <Youtube className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Home</span>
-            </button>
-
-            <button
-              className="flex items-center gap-2 px-4 sm:px-6 py-3 sm:py-4 bg-purple-600 text-white font-semibold border-b-4 border-purple-700 hover:bg-purple-700 transition-colors text-sm sm:text-base"
-            >
-              <History className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>History</span>
-            </button>
-          </div>
-        </div>
-      </nav>
+      {onNavigateHome && onNavigateHistory && onNavigateShorts && onNavigateTitle && onNavigateMonitoring && onNavigateSettings && (
+        <NavigationBar
+          currentPage="history"
+          onNavigateHome={onNavigateHome}
+          onNavigateHistory={onNavigateHistory}
+          onNavigateShorts={onNavigateShorts}
+          onNavigateTitle={onNavigateTitle}
+          onNavigateMonitoring={onNavigateMonitoring}
+          onNavigateSettings={onNavigateSettings}
+          onNavigateScheduleToday={onNavigateScheduleToday}
+          onNavigateScheduleCalendar={onNavigateScheduleCalendar}
+          onPushToChat={onPushToChat}
+          queueCount={getQueueCount()}
+        />
+      )}
 
       {/* Content */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 sm:py-8">
@@ -351,22 +370,41 @@ export default function ProcessedVideos({ onVideoSelect, onClose }: ProcessedVid
                             video.targetChannelProcessings.slice(0, 2).map((processing) => (
                               <div
                                 key={processing.targetChannelId}
-                                className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400"
+                                className="flex items-center gap-2"
                               >
-                                <CheckCircle className="w-3 h-3" />
-                                <span className="truncate">{processing.targetChannelName}</span>
+                                <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                  <CheckCircle className="w-3 h-3" />
+                                  <span className="truncate">{processing.targetChannelName}</span>
+                                </div>
+                                {processing.isScheduled && (
+                                  <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
+                                    <Calendar className="w-3 h-3" />
+                                    <span>{processing.scheduleDate} • #{processing.slotNumber}</span>
+                                  </div>
+                                )}
                               </div>
                             ))
                           ) : (
                             // Show only selected target channel when filtered
-                            <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-                              <CheckCircle className="w-3 h-3" />
-                              <span className="truncate">
-                                {video.targetChannelProcessings.find(
-                                  (p) => p.targetChannelId === selectedTargetChannel
-                                )?.targetChannelName}
-                              </span>
-                            </div>
+                            (() => {
+                              const selectedProcessing = video.targetChannelProcessings.find(
+                                (p) => p.targetChannelId === selectedTargetChannel
+                              );
+                              return (
+                                <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                                    <CheckCircle className="w-3 h-3" />
+                                    <span className="truncate">{selectedProcessing?.targetChannelName}</span>
+                                  </div>
+                                  {selectedProcessing?.isScheduled && (
+                                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
+                                      <Calendar className="w-3 h-3" />
+                                      <span>{selectedProcessing.scheduleDate} • #{selectedProcessing.slotNumber}</span>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()
                           )}
                           {selectedTargetChannel === 'all' && video.targetChannelProcessings.length > 2 && (
                             <p className="text-xs text-gray-500 dark:text-gray-400">

@@ -12,7 +12,14 @@ interface ProcessVideoRequest {
 interface MonitorSettings {
   ai_model: string;
   custom_prompt: string;
-  supabase_api_key: string;
+  supabase_api_key: string; // Legacy - single key
+  supadata_keys?: Array<{
+    key: string;
+    label?: string;
+    active: boolean;
+    added_at?: string;
+    last_used_at?: string;
+  }>; // New - multiple keys for rotation
   deepseek_api_key: string;
   gemini_api_key: string;
   openrouter_api_key: string;
@@ -109,11 +116,11 @@ serve(async (req) => {
       .eq('video_id', video_id);
 
     try {
-      // Step 3: Fetch transcript
+      // Step 3: Fetch transcript with API key rotation
       console.log('📝 Fetching transcript...');
-      const transcript = await fetchTranscript(
+      const transcript = await fetchTranscriptWithRotation(
         videoUrl,
-        monitorSettings.supabase_api_key
+        monitorSettings
       );
 
       console.log(`✓ Transcript fetched: ${transcript.length} characters`);
@@ -132,24 +139,9 @@ serve(async (req) => {
       // Step 5: Clean markdown
       const cleanedOutput = cleanMarkdown(aiOutput);
 
-      // Step 6: Send to Telegram
-      console.log('📤 Sending to Telegram...');
-
-      // Use Chat 2 (with title) for auto-monitoring, fallback to Chat 1
-      const targetChatId = monitorSettings.telegram_chat_id_with_title || monitorSettings.telegram_chat_id;
-
-      console.log(`📱 Sending to ${monitorSettings.telegram_chat_id_with_title ? 'Chat 2 (with title)' : 'Chat 1 (default)'}...`);
-
-      const telegramResult = await sendToTelegram(
-        monitorSettings.telegram_bot_token,
-        targetChatId,
-        cleanedOutput,
-        videoTitle,
-        videoUrl,
-        video_id
-      );
-
-      console.log(`✓ Sent to Telegram: Message ID ${telegramResult.messageId}`);
+      // Step 6: REMOVED - No automatic Telegram sending
+      // Videos will only be sent to Telegram via manual "Push to Telegram" button
+      console.log('✅ Processing complete - video ready for scheduling');
 
       // Step 7: Mark as successfully processed
       await supabase.from('processed_videos').insert({
@@ -162,8 +154,8 @@ serve(async (req) => {
         ai_model: monitorSettings.ai_model,
         transcript_length: transcript.length,
         output_length: cleanedOutput.length,
-        telegram_sent: true,
-        telegram_message_id: telegramResult.messageId,
+        telegram_sent: false, // No longer auto-sending to Telegram
+        telegram_message_id: null,
         processed_at: new Date().toISOString(),
       });
 
@@ -186,8 +178,8 @@ serve(async (req) => {
           video_title: videoTitle,
           transcript_length: transcript.length,
           output_length: cleanedOutput.length,
-          telegram_message_id: telegramResult.messageId,
           duration_ms: duration,
+          message: 'Video processed and ready for scheduling',
         }),
         {
           status: 200,
@@ -281,7 +273,80 @@ serve(async (req) => {
 // ============================================
 
 /**
- * Fetch transcript from SupaData API
+ * Get active SupaData API keys (with fallback to legacy single key)
+ */
+function getActiveSupadataKeys(settings: MonitorSettings): string[] {
+  // Try new multi-key system first
+  if (settings.supadata_keys && settings.supadata_keys.length > 0) {
+    const activeKeys = settings.supadata_keys
+      .filter(k => k.active)
+      .map(k => k.key);
+
+    if (activeKeys.length > 0) {
+      console.log(`🔑 Found ${activeKeys.length} active SupaData API keys`);
+      return activeKeys;
+    }
+  }
+
+  // Fallback to legacy single key
+  if (settings.supabase_api_key) {
+    console.log('🔑 Using legacy single API key');
+    return [settings.supabase_api_key];
+  }
+
+  return [];
+}
+
+/**
+ * Fetch transcript with automatic API key rotation
+ */
+async function fetchTranscriptWithRotation(
+  videoUrl: string,
+  settings: MonitorSettings
+): Promise<string> {
+  const apiKeys = getActiveSupadataKeys(settings);
+
+  if (apiKeys.length === 0) {
+    throw new Error('No active SupaData API keys configured');
+  }
+
+  let lastError: Error | null = null;
+
+  // Try each API key until one succeeds
+  for (let i = 0; i < apiKeys.length; i++) {
+    const apiKey = apiKeys[i];
+    const keyLabel = settings.supadata_keys?.[i]?.label || `Key ${i + 1}`;
+
+    try {
+      console.log(`🔑 Attempting with ${keyLabel}...`);
+      const transcript = await fetchTranscript(videoUrl, apiKey);
+      console.log(`✅ Success with ${keyLabel}`);
+      return transcript;
+    } catch (error: any) {
+      lastError = error;
+      const errorMsg = error.message || 'Unknown error';
+
+      // Check if it's a rate limit or auth error
+      if (errorMsg.includes('rate limit') || errorMsg.includes('429')) {
+        console.log(`⏳ ${keyLabel} rate limited, trying next key...`);
+        continue;
+      } else if (errorMsg.includes('invalid') || errorMsg.includes('expired') || errorMsg.includes('401')) {
+        console.log(`❌ ${keyLabel} invalid/expired, trying next key...`);
+        continue;
+      } else {
+        // Other errors (no transcript, network issues, etc) - don't try other keys
+        console.error(`❌ ${keyLabel} failed with non-recoverable error: ${errorMsg}`);
+        throw error;
+      }
+    }
+  }
+
+  // All keys failed
+  throw new Error(`All ${apiKeys.length} API keys failed. Last error: ${lastError?.message}`);
+}
+
+/**
+ * Fetch transcript from SupaData API (single key attempt)
  */
 async function fetchTranscript(
   videoUrl: string,

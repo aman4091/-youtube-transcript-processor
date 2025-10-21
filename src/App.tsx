@@ -1004,12 +1004,36 @@ function App() {
 
   // If Schedule Today is open
   if (showScheduleToday) {
-    return <ScheduleToday />;
+    return (
+      <ScheduleToday
+        onNavigateHome={() => setShowScheduleToday(false)}
+        onNavigateHistory={() => { setShowScheduleToday(false); setIsHistoryOpen(true); }}
+        onNavigateShorts={() => { setShowScheduleToday(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => { setShowScheduleToday(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => { setShowScheduleToday(false); setShowMonitoringPage(true); }}
+        onNavigateSettings={() => { setShowScheduleToday(false); setShowSettingsPage(true); }}
+        onNavigateScheduleToday={() => {}} // Already on Schedule Today page
+        onNavigateScheduleCalendar={() => { setShowScheduleToday(false); setShowScheduleCalendar(true); }}
+        onPushToChat={handlePushToChat}
+      />
+    );
   }
 
   // If Schedule Calendar is open
   if (showScheduleCalendar) {
-    return <ScheduleCalendar />;
+    return (
+      <ScheduleCalendar
+        onNavigateHome={() => setShowScheduleCalendar(false)}
+        onNavigateHistory={() => { setShowScheduleCalendar(false); setIsHistoryOpen(true); }}
+        onNavigateShorts={() => { setShowScheduleCalendar(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => { setShowScheduleCalendar(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => { setShowScheduleCalendar(false); setShowMonitoringPage(true); }}
+        onNavigateSettings={() => { setShowScheduleCalendar(false); setShowSettingsPage(true); }}
+        onNavigateScheduleToday={() => { setShowScheduleCalendar(false); setShowScheduleToday(true); }}
+        onNavigateScheduleCalendar={() => {}} // Already on Schedule Calendar page
+        onPushToChat={handlePushToChat}
+      />
+    );
   }
 
   // If shorts finder is open, show only shorts finder page
@@ -1037,6 +1061,9 @@ function App() {
         onNavigateShorts={() => { setShowSettingsPage(false); setShowShortsFinder(true); }}
         onNavigateTitle={() => { setShowSettingsPage(false); setShowTitleCreationPage(true); }}
         onNavigateMonitoring={() => { setShowSettingsPage(false); setShowMonitoringPage(true); }}
+        onNavigateSettings={() => {}} // Already on settings page
+        onNavigateScheduleToday={() => { setShowSettingsPage(false); setShowScheduleToday(true); }}
+        onNavigateScheduleCalendar={() => { setShowSettingsPage(false); setShowScheduleCalendar(true); }}
         onPushToChat={handlePushToChat}
       />
     );
@@ -1053,6 +1080,8 @@ function App() {
         onNavigateTitle={() => { setShowMonitoringPage(false); setShowTitleCreationPage(true); }}
         onNavigateMonitoring={() => {}} // Already on monitoring page
         onNavigateSettings={() => { setShowMonitoringPage(false); setShowSettingsPage(true); }}
+        onNavigateScheduleToday={() => { setShowMonitoringPage(false); setShowScheduleToday(true); }}
+        onNavigateScheduleCalendar={() => { setShowMonitoringPage(false); setShowScheduleCalendar(true); }}
         onPushToChat={handlePushToChat}
       />
     );
@@ -1080,6 +1109,15 @@ function App() {
       <ProcessedVideos
         onVideoSelect={handleProcess}
         onClose={() => setIsHistoryOpen(false)}
+        onNavigateHome={() => setIsHistoryOpen(false)}
+        onNavigateHistory={() => {}} // Already on history page
+        onNavigateShorts={() => { setIsHistoryOpen(false); setShowShortsFinder(true); }}
+        onNavigateTitle={() => { setIsHistoryOpen(false); setShowTitleCreationPage(true); }}
+        onNavigateMonitoring={() => { setIsHistoryOpen(false); setShowMonitoringPage(true); }}
+        onNavigateSettings={() => { setIsHistoryOpen(false); setShowSettingsPage(true); }}
+        onNavigateScheduleToday={() => { setIsHistoryOpen(false); setShowScheduleToday(true); }}
+        onNavigateScheduleCalendar={() => { setIsHistoryOpen(false); setShowScheduleCalendar(true); }}
+        onPushToChat={handlePushToChat}
       />
     );
   }

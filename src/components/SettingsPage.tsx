@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { Youtube, Settings as SettingsIcon, Send, Video, VideoOff, Terminal, Download, Upload, AlertCircle, Plus, Trash2, Edit3, X } from 'lucide-react';
+import { Youtube, Settings as SettingsIcon, Send, Video, VideoOff, Terminal, Download, Upload, AlertCircle, Plus, Trash2, Edit3, X, Key, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import NavigationBar from './NavigationBar';
-import { useSettingsStore, TargetChannel } from '../stores/settingsStore';
+import { useSettingsStore, TargetChannel, SupaDataApiKey } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
@@ -15,6 +15,7 @@ import {
   restoreFullBackup,
   BackupData,
 } from '../utils/backupRestore';
+import { supabase } from '../services/supabaseClient';
 
 interface SettingsPageProps {
   onClose: () => void;
@@ -23,6 +24,9 @@ interface SettingsPageProps {
   onNavigateShorts: () => void;
   onNavigateTitle: () => void;
   onNavigateMonitoring: () => void;
+  onNavigateSettings?: () => void;
+  onNavigateScheduleToday?: () => void;
+  onNavigateScheduleCalendar?: () => void;
   onPushToChat?: () => void;
 }
 
@@ -33,6 +37,9 @@ export default function SettingsPage({
   onNavigateShorts,
   onNavigateTitle,
   onNavigateMonitoring,
+  onNavigateSettings,
+  onNavigateScheduleToday,
+  onNavigateScheduleCalendar,
   onPushToChat,
 }: SettingsPageProps) {
   const { settings, updateSettings } = useSettingsStore();
@@ -65,9 +72,15 @@ export default function SettingsPage({
   const [channelName, setChannelName] = useState('');
   const [channelDescription, setChannelDescription] = useState('');
 
+  // Multiple SupaData API Keys states
+  const [supaDataKeys, setSupaDataKeys] = useState<SupaDataApiKey[]>(settings.supaDataApiKeys || []);
+  const [isSyncingKeys, setIsSyncingKeys] = useState(false);
+  const [keySyncMessage, setKeySyncMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
   useEffect(() => {
     setLocalSettings(settings);
     setChannelUrlsText(settings.channelUrls.join('\n'));
+    setSupaDataKeys(settings.supaDataApiKeys || []);
   }, [settings]);
 
   useEffect(() => {
@@ -311,6 +324,119 @@ export default function SettingsPage({
     setLocalSettings({ ...localSettings, targetChannels: updatedChannels });
   };
 
+  // ==========================================
+  // Multiple SupaData API Keys Functions
+  // ==========================================
+
+  const addSupaDataKey = () => {
+    const newKey: SupaDataApiKey = {
+      key: '',
+      label: `Key ${supaDataKeys.length + 1}`,
+      active: true,
+      added_at: new Date().toISOString(),
+      error_count: 0,
+    };
+    setSupaDataKeys([...supaDataKeys, newKey]);
+  };
+
+  const removeSupaDataKey = (index: number) => {
+    setSupaDataKeys(supaDataKeys.filter((_, i) => i !== index));
+  };
+
+  const toggleSupaDataKey = (index: number) => {
+    const updated = [...supaDataKeys];
+    updated[index].active = !updated[index].active;
+    setSupaDataKeys(updated);
+  };
+
+  const updateSupaDataKey = (index: number, field: keyof SupaDataApiKey, value: any) => {
+    const updated = [...supaDataKeys];
+    updated[index] = { ...updated[index], [field]: value };
+    setSupaDataKeys(updated);
+  };
+
+  const isKeyExhausted = (key: SupaDataApiKey): boolean => {
+    // Key is exhausted if it has 3+ errors or specific error messages
+    if (key.error_count && key.error_count >= 3) return true;
+    if (key.last_error?.includes('invalid') || key.last_error?.includes('expired')) return true;
+    if (key.last_error?.includes('rate limit') && key.error_count && key.error_count >= 2) return true;
+    return false;
+  };
+
+  const syncKeysToSupabase = async () => {
+    setIsSyncingKeys(true);
+    setKeySyncMessage(null);
+
+    try {
+      // Remove empty keys before saving
+      const validKeys = supaDataKeys.filter(k => k.key.trim() !== '');
+
+      // Auto-remove exhausted keys if enabled
+      const keysToSave = localSettings.autoRemoveExhaustedKeys
+        ? validKeys.filter(k => !isKeyExhausted(k))
+        : validKeys;
+
+      // Update Supabase
+      const { error } = await supabase
+        .from('auto_monitor_settings')
+        .update({
+          supadata_keys: keysToSave.map(k => ({
+            key: k.key,
+            label: k.label,
+            active: k.active,
+            added_at: k.added_at || new Date().toISOString(),
+          })),
+        })
+        .eq('user_id', 'default_user');
+
+      if (error) throw error;
+
+      // Update local settings store
+      updateSettings({ supaDataApiKeys: keysToSave });
+      setSupaDataKeys(keysToSave);
+
+      const removedCount = validKeys.length - keysToSave.length;
+      const message = removedCount > 0
+        ? `✅ ${keysToSave.length} keys saved! (${removedCount} exhausted keys removed)`
+        : `✅ ${keysToSave.length} keys saved to database!`;
+
+      setKeySyncMessage({ type: 'success', text: message });
+
+      // Clear message after 3 seconds
+      setTimeout(() => setKeySyncMessage(null), 3000);
+    } catch (error: any) {
+      console.error('Error syncing keys:', error);
+      setKeySyncMessage({ type: 'error', text: `❌ Failed: ${error.message}` });
+    } finally {
+      setIsSyncingKeys(false);
+    }
+  };
+
+  const loadKeysFromSupabase = async () => {
+    setIsSyncingKeys(true);
+    try {
+      const { data, error } = await supabase
+        .from('auto_monitor_settings')
+        .select('supadata_keys')
+        .eq('user_id', 'default_user')
+        .single();
+
+      if (error) throw error;
+
+      if (data?.supadata_keys && Array.isArray(data.supadata_keys)) {
+        setSupaDataKeys(data.supadata_keys);
+        updateSettings({ supaDataApiKeys: data.supadata_keys });
+        setKeySyncMessage({ type: 'success', text: `✅ Loaded ${data.supadata_keys.length} keys from database` });
+        setTimeout(() => setKeySyncMessage(null), 3000);
+      }
+    } catch (error: any) {
+      console.error('Error loading keys:', error);
+      setKeySyncMessage({ type: 'error', text: `❌ Failed to load: ${error.message}` });
+    } finally {
+      setIsSyncingKeys(false);
+    }
+  };
+
   const filteredModels = openRouterModels.filter(
     (model) =>
       model.id.toLowerCase().includes(modelSearch.toLowerCase()) ||
@@ -344,7 +470,9 @@ export default function SettingsPage({
         onNavigateShorts={onNavigateShorts}
         onNavigateTitle={onNavigateTitle}
         onNavigateMonitoring={onNavigateMonitoring}
-        onNavigateSettings={() => {}} // Already on settings page
+        onNavigateSettings={onNavigateSettings || (() => {})} // Already on settings page
+        onNavigateScheduleToday={onNavigateScheduleToday}
+        onNavigateScheduleCalendar={onNavigateScheduleCalendar}
         onPushToChat={onPushToChat}
         queueCount={queuedScripts.length}
       />
@@ -375,7 +503,7 @@ export default function SettingsPage({
 
             <div>
               <label className="block text-sm font-medium mb-2">
-                SupaData API Key
+                SupaData API Key (Legacy - Single Key)
               </label>
               <input
                 type="password"
@@ -386,6 +514,218 @@ export default function SettingsPage({
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Enter SupaData API key"
               />
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                ⚠️ Deprecated: Use "Multiple SupaData Keys" below for automatic rotation
+              </p>
+            </div>
+
+            {/* Multiple SupaData API Keys - NEW! */}
+            <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="text-base font-semibold flex items-center gap-2">
+                    <Key className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                    Multiple SupaData API Keys (Recommended)
+                  </h4>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Add multiple keys for automatic rotation when rate limits hit. System never stops!
+                  </p>
+                </div>
+                <button
+                  onClick={addSupaDataKey}
+                  className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg flex items-center gap-2 text-sm transition-colors"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add Key
+                </button>
+              </div>
+
+              {/* Auto-remove exhausted keys toggle */}
+              <div className="flex items-center gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                <input
+                  type="checkbox"
+                  id="autoRemoveKeys"
+                  checked={localSettings.autoRemoveExhaustedKeys}
+                  onChange={(e) =>
+                    setLocalSettings({ ...localSettings, autoRemoveExhaustedKeys: e.target.checked })
+                  }
+                  className="w-4 h-4"
+                />
+                <label htmlFor="autoRemoveKeys" className="text-sm text-gray-700 dark:text-gray-300">
+                  🗑️ Auto-remove exhausted keys when saving (keys with 3+ errors or invalid/expired)
+                </label>
+              </div>
+
+              {/* Keys List */}
+              {supaDataKeys.length === 0 ? (
+                <div className="text-center py-8 bg-gray-50 dark:bg-gray-800 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700">
+                  <Key className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">
+                    No API keys added yet. Click "Add Key" to get started!
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {supaDataKeys.map((apiKey, index) => {
+                    const exhausted = isKeyExhausted(apiKey);
+                    return (
+                      <div
+                        key={index}
+                        className={`flex items-center gap-2 p-3 rounded-lg border ${
+                          exhausted
+                            ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800'
+                            : 'bg-gray-50 dark:bg-gray-800 border-gray-300 dark:border-gray-700'
+                        }`}
+                      >
+                        {/* Active/Inactive Toggle */}
+                        <div className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={apiKey.active}
+                            onChange={() => toggleSupaDataKey(index)}
+                            className="w-4 h-4"
+                            title={apiKey.active ? 'Active' : 'Inactive'}
+                          />
+                        </div>
+
+                        {/* Label Input */}
+                        <input
+                          type="text"
+                          value={apiKey.label}
+                          onChange={(e) => updateSupaDataKey(index, 'label', e.target.value)}
+                          placeholder="Label (e.g., Primary Key)"
+                          className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded w-32 text-sm bg-white dark:bg-gray-700"
+                        />
+
+                        {/* API Key Input */}
+                        <input
+                          type="password"
+                          value={apiKey.key}
+                          onChange={(e) => updateSupaDataKey(index, 'key', e.target.value)}
+                          placeholder="sk-xxx..."
+                          className={`flex-1 px-2 py-1 border rounded text-sm ${
+                            exhausted
+                              ? 'border-red-400 dark:border-red-600 bg-red-50 dark:bg-red-900/30'
+                              : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700'
+                          }`}
+                        />
+
+                        {/* Status Icons */}
+                        <div className="flex items-center gap-1">
+                          {exhausted ? (
+                            <div className="flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400 rounded text-xs font-medium">
+                              <XCircle className="w-3 h-3" />
+                              <span>Exhausted</span>
+                            </div>
+                          ) : apiKey.active ? (
+                            <div className="flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 rounded text-xs font-medium">
+                              <CheckCircle className="w-3 h-3" />
+                              <span>Active</span>
+                            </div>
+                          ) : (
+                            <div className="px-2 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded text-xs font-medium">
+                              Inactive
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Error Count Badge */}
+                        {apiKey.error_count && apiKey.error_count > 0 && (
+                          <div className="px-2 py-1 bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 rounded text-xs font-medium">
+                            {apiKey.error_count} errors
+                          </div>
+                        )}
+
+                        {/* Delete Button */}
+                        <button
+                          onClick={() => removeSupaDataKey(index)}
+                          className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                          title="Remove key"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Error Messages Display */}
+              {supaDataKeys.some(k => k.last_error) && (
+                <div className="space-y-2">
+                  <h5 className="text-sm font-medium text-gray-700 dark:text-gray-300">Recent Errors:</h5>
+                  {supaDataKeys
+                    .filter(k => k.last_error)
+                    .map((k, i) => (
+                      <div
+                        key={i}
+                        className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-xs text-red-700 dark:text-red-400"
+                      >
+                        <span className="font-medium">{k.label}:</span> {k.last_error}
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* Sync Buttons */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={syncKeysToSupabase}
+                  disabled={isSyncingKeys || supaDataKeys.length === 0}
+                  className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                >
+                  {isSyncingKeys ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Saving...
+                    </>
+                  ) : (
+                    <>
+                      💾 Save Keys to Database
+                    </>
+                  )}
+                </button>
+
+                <button
+                  onClick={loadKeysFromSupabase}
+                  disabled={isSyncingKeys}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+                >
+                  {isSyncingKeys ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    </>
+                  ) : (
+                    <>
+                      🔄 Load from DB
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* Success/Error Messages */}
+              {keySyncMessage && (
+                <div
+                  className={`p-3 rounded-lg border ${
+                    keySyncMessage.type === 'success'
+                      ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-800 text-green-700 dark:text-green-400'
+                      : 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-800 text-red-700 dark:text-red-400'
+                  }`}
+                >
+                  {keySyncMessage.text}
+                </div>
+              )}
+
+              {/* Info Box */}
+              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 text-xs text-blue-700 dark:text-blue-400">
+                <p className="font-medium mb-1">💡 How it works:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                  <li>System tries keys in order until one succeeds</li>
+                  <li>Auto-rotates on rate limits (429) or invalid keys (401)</li>
+                  <li>Exhausted keys are marked in red (3+ errors or invalid/expired)</li>
+                  <li>Enable auto-remove to clean up bad keys automatically</li>
+                </ul>
+              </div>
             </div>
 
             <div>

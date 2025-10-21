@@ -1,13 +1,15 @@
-import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send, Activity } from 'lucide-react';
+import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send, Activity, Calendar, CalendarDays } from 'lucide-react';
 
 interface NavigationBarProps {
-  currentPage?: 'home' | 'history' | 'shorts' | 'title' | 'monitoring' | 'settings';
+  currentPage?: 'home' | 'history' | 'shorts' | 'title' | 'monitoring' | 'settings' | 'schedule-today' | 'schedule-calendar';
   onNavigateHome: () => void;
   onNavigateHistory: () => void;
   onNavigateShorts: () => void;
   onNavigateTitle: () => void;
   onNavigateMonitoring: () => void;
   onNavigateSettings: () => void;
+  onNavigateScheduleToday?: () => void;
+  onNavigateScheduleCalendar?: () => void;
   onPushToChat?: () => void;
   queueCount?: number;
 }
@@ -20,6 +22,8 @@ export default function NavigationBar({
   onNavigateTitle,
   onNavigateMonitoring,
   onNavigateSettings,
+  onNavigateScheduleToday,
+  onNavigateScheduleCalendar,
   onPushToChat,
   queueCount = 0,
 }: NavigationBarProps) {
@@ -64,6 +68,22 @@ export default function NavigationBar({
               <span className="hidden sm:inline">Monitoring</span>
               <span className="sm:hidden">Monitor</span>
             </button>
+
+            {onNavigateScheduleToday && (
+              <button onClick={onNavigateScheduleToday} className={getButtonClass('schedule-today')}>
+                <Calendar className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span className="hidden sm:inline">Schedule Today</span>
+                <span className="sm:hidden">Today</span>
+              </button>
+            )}
+
+            {onNavigateScheduleCalendar && (
+              <button onClick={onNavigateScheduleCalendar} className={getButtonClass('schedule-calendar')}>
+                <CalendarDays className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                <span className="hidden sm:inline">Schedule Calendar</span>
+                <span className="sm:hidden">Calendar</span>
+              </button>
+            )}
 
             <button onClick={onNavigateSettings} className={getButtonClass('settings')}>
               <SettingsIcon className="w-4 h-4 sm:w-4.5 sm:h-4.5" />

@@ -8,10 +8,12 @@ import {
   AlertCircle,
   PlayCircle,
   Youtube,
+  History,
 } from 'lucide-react';
 import NavigationBar from './NavigationBar';
 import { supabase } from '../services/supabaseClient';
 import { useTempQueueStore } from '../stores/tempQueueStore';
+import { syncPublishedVideosToHistory } from '../utils/syncScheduledToHistory';
 import type { ScheduledVideo } from '../types/scheduling';
 
 interface ScheduleTodayProps {
@@ -43,6 +45,7 @@ export default function ScheduleToday({
   const [videos, setVideos] = useState<ScheduledVideo[]>([]);
   const [loading, setLoading] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -140,6 +143,25 @@ export default function ScheduleToday({
     }
   };
 
+  const handleSyncToHistory = async () => {
+    setSyncing(true);
+    setError(null);
+
+    try {
+      const result = await syncPublishedVideosToHistory(scheduleDate);
+
+      if (result.success) {
+        setSuccessMessage(`✅ Synced ${result.synced} published videos to History!`);
+      } else {
+        setError(result.error || 'Failed to sync to history');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to sync to history');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const groupByChannel = (videos: ScheduledVideo[]) => {
     const grouped: Record<string, ScheduledVideo[]> = {};
     videos.forEach((video) => {
@@ -232,6 +254,24 @@ export default function ScheduleToday({
                 <>
                   <Send className="w-5 h-5" />
                   Push to Telegram ({stats.ready} ready)
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleSyncToHistory}
+              disabled={syncing || stats.published === 0}
+              className="px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              {syncing ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <History className="w-5 h-5" />
+                  Sync to History ({stats.published} published)
                 </>
               )}
             </button>

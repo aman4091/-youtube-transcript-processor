@@ -41,6 +41,8 @@ interface MonitoringDashboardProps {
   onNavigateTitle: () => void;
   onNavigateMonitoring: () => void;
   onNavigateSettings: () => void;
+  onNavigateScheduleToday?: () => void;
+  onNavigateScheduleCalendar?: () => void;
   onPushToChat?: () => void;
 }
 
@@ -52,6 +54,8 @@ export default function MonitoringDashboard({
   onNavigateTitle,
   onNavigateMonitoring: _onNavigateMonitoring,
   onNavigateSettings,
+  onNavigateScheduleToday,
+  onNavigateScheduleCalendar,
   onPushToChat,
 }: MonitoringDashboardProps) {
   const { settings, updateSettings } = useSettingsStore();
@@ -257,6 +261,8 @@ export default function MonitoringDashboard({
           onNavigateTitle={onNavigateTitle}
           onNavigateMonitoring={() => {}} // Already on monitoring page
           onNavigateSettings={onNavigateSettings}
+          onNavigateScheduleToday={onNavigateScheduleToday}
+          onNavigateScheduleCalendar={onNavigateScheduleCalendar}
           onPushToChat={onPushToChat}
           queueCount={getQueueCount()}
         />
@@ -316,6 +322,8 @@ export default function MonitoringDashboard({
         onNavigateTitle={onNavigateTitle}
         onNavigateMonitoring={() => {}} // Already on monitoring page
         onNavigateSettings={onNavigateSettings}
+        onNavigateScheduleToday={onNavigateScheduleToday}
+        onNavigateScheduleCalendar={onNavigateScheduleCalendar}
         onPushToChat={onPushToChat}
         queueCount={getQueueCount()}
       />

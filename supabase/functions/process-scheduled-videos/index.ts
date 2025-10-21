@@ -169,28 +169,9 @@ serve(async (req) => {
 // Process old video with full pipeline
 async function processOldVideo(video: any, settings: any) {
   try {
-    // Fetch transcript
+    // Fetch transcript with API key rotation
     const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
-    const url = new URL('https://api.supadata.ai/v1/transcript');
-    url.searchParams.set('url', videoUrl);
-    url.searchParams.set('text', 'true');
-
-    const transcriptResponse = await fetch(url.toString(), {
-      method: 'GET',
-      headers: { 'x-api-key': settings.supabase_api_key },
-    });
-
-    if (!transcriptResponse.ok) {
-      throw new Error('Failed to fetch transcript');
-    }
-
-    const transcriptData = await transcriptResponse.json();
-    const transcript = transcriptData.data?.transcript;
-
-    if (!transcript) {
-      throw new Error('No transcript available');
-    }
-
+    const transcript = await fetchTranscriptWithRotation(videoUrl, settings);
     console.log(`Transcript fetched: ${transcript.length} chars`);
 
     // Split into chunks (7000 chars)
@@ -242,6 +223,120 @@ async function processOldVideo(video: any, settings: any) {
     return { success: false, error: error.message };
   }
 }
+
+// ============================================
+// SupaData API Key Rotation Helper Functions
+// ============================================
+
+/**
+ * Get active SupaData API keys (with fallback to legacy single key)
+ */
+function getActiveSupadataKeys(settings: any): string[] {
+  // Try new multi-key system first
+  if (settings.supadata_keys && settings.supadata_keys.length > 0) {
+    const activeKeys = settings.supadata_keys
+      .filter((k: any) => k.active)
+      .map((k: any) => k.key);
+
+    if (activeKeys.length > 0) {
+      console.log(`🔑 Found ${activeKeys.length} active SupaData API keys`);
+      return activeKeys;
+    }
+  }
+
+  // Fallback to legacy single key
+  if (settings.supabase_api_key) {
+    console.log('🔑 Using legacy single API key');
+    return [settings.supabase_api_key];
+  }
+
+  return [];
+}
+
+/**
+ * Fetch transcript with automatic API key rotation
+ */
+async function fetchTranscriptWithRotation(
+  videoUrl: string,
+  settings: any
+): Promise<string> {
+  const apiKeys = getActiveSupadataKeys(settings);
+
+  if (apiKeys.length === 0) {
+    throw new Error('No active SupaData API keys configured');
+  }
+
+  let lastError: Error | null = null;
+
+  // Try each API key until one succeeds
+  for (let i = 0; i < apiKeys.length; i++) {
+    const apiKey = apiKeys[i];
+    const keyLabel = settings.supadata_keys?.[i]?.label || `Key ${i + 1}`;
+
+    try {
+      console.log(`🔑 Attempting with ${keyLabel}...`);
+      const transcript = await fetchTranscript(videoUrl, apiKey);
+      console.log(`✅ Success with ${keyLabel}`);
+      return transcript;
+    } catch (error: any) {
+      lastError = error;
+      const errorMsg = error.message || 'Unknown error';
+
+      // Check if it's a rate limit or auth error
+      if (errorMsg.includes('rate limit') || errorMsg.includes('429')) {
+        console.log(`⏳ ${keyLabel} rate limited, trying next key...`);
+        continue;
+      } else if (errorMsg.includes('invalid') || errorMsg.includes('expired') || errorMsg.includes('401')) {
+        console.log(`❌ ${keyLabel} invalid/expired, trying next key...`);
+        continue;
+      } else {
+        // Other errors (no transcript, network issues, etc) - don't try other keys
+        console.error(`❌ ${keyLabel} failed with non-recoverable error: ${errorMsg}`);
+        throw error;
+      }
+    }
+  }
+
+  // All keys failed
+  throw new Error(`All ${apiKeys.length} API keys failed. Last error: ${lastError?.message}`);
+}
+
+/**
+ * Fetch transcript from SupaData API (single key attempt)
+ */
+async function fetchTranscript(videoUrl: string, apiKey: string): Promise<string> {
+  const url = new URL('https://api.supadata.ai/v1/transcript');
+  url.searchParams.set('url', videoUrl);
+  url.searchParams.set('text', 'true');
+
+  const response = await fetch(url.toString(), {
+    method: 'GET',
+    headers: { 'x-api-key': apiKey },
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      throw new Error('SupaData API key is invalid or expired');
+    }
+    if (response.status === 429) {
+      throw new Error('SupaData API rate limit exceeded');
+    }
+    throw new Error(`SupaData API error: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  const transcript = data.data?.transcript || data.content || data.text || data.transcript;
+
+  if (!transcript) {
+    throw new Error('No transcript available');
+  }
+
+  return transcript;
+}
+
+// ============================================
+// Text Processing Helpers
+// ============================================
 
 // Chunking helper
 function chunkText(text: string, maxLength: number): string[] {

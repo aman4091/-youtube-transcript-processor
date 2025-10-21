@@ -6,6 +6,9 @@ export interface TargetChannelProcessing {
   targetChannelName: string;
   processedAt: string;
   savedOutput?: string;
+  isScheduled?: boolean;
+  scheduleDate?: string;
+  slotNumber?: number;
 }
 
 export interface ProcessedLink {
@@ -26,7 +29,10 @@ interface HistoryStore {
     videoId?: string,
     title?: string,
     thumbnail?: string,
-    channelTitle?: string
+    channelTitle?: string,
+    isScheduled?: boolean,
+    scheduleDate?: string,
+    slotNumber?: number
   ) => void;
   isLinkProcessed: (url: string, targetChannelId?: string) => boolean;
   saveOutput: (url: string, targetChannelId: string, output: string) => void;
@@ -43,7 +49,7 @@ export const useHistoryStore = create<HistoryStore>()(
     (set, get) => ({
       processedLinks: [],
 
-      addProcessedLink: (url, targetChannelId, targetChannelName, videoId, title, thumbnail, channelTitle) => {
+      addProcessedLink: (url, targetChannelId, targetChannelName, videoId, title, thumbnail, channelTitle, isScheduled, scheduleDate, slotNumber) => {
         const existingVideo = get().processedLinks.find((link) => link.url === url);
 
         if (existingVideo) {
@@ -65,6 +71,9 @@ export const useHistoryStore = create<HistoryStore>()(
                           targetChannelId,
                           targetChannelName,
                           processedAt: new Date().toISOString(),
+                          isScheduled,
+                          scheduleDate,
+                          slotNumber,
                         },
                       ],
                     }
@@ -87,6 +96,9 @@ export const useHistoryStore = create<HistoryStore>()(
                     targetChannelId,
                     targetChannelName,
                     processedAt: new Date().toISOString(),
+                    isScheduled,
+                    scheduleDate,
+                    slotNumber,
                   },
                 ],
               },
@@ -172,7 +184,7 @@ export const useHistoryStore = create<HistoryStore>()(
     }),
     {
       name: 'youtube-processor-history',
-      version: 2,
+      version: 3,
       migrate: (persistedState: any, version: number) => {
         console.log(`🔧 Migrating history from version ${version}`);
 

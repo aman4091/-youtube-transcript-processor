@@ -7,8 +7,19 @@ export interface TargetChannel {
   description?: string;
 }
 
+export interface SupaDataApiKey {
+  key: string;
+  label: string;
+  active: boolean;
+  added_at?: string;
+  error_count?: number; // Track failed attempts
+  last_error?: string; // Last error message
+  last_used_at?: string;
+}
+
 export interface Settings {
-  supaDataApiKey: string;
+  supaDataApiKey: string; // Legacy - single key (kept for backward compatibility)
+  supaDataApiKeys: SupaDataApiKey[]; // NEW - Multiple keys with rotation
   deepSeekApiKey: string;
   geminiApiKey: string;
   openRouterApiKey: string;
@@ -38,6 +49,8 @@ export interface Settings {
   monitoringAIModel: 'deepseek' | 'gemini-flash' | 'gemini-pro' | 'openrouter';
   supabaseUrl: string;
   supabaseAnonKey: string;
+  // SupaData key management
+  autoRemoveExhaustedKeys: boolean; // Auto-remove keys with high error count
 }
 
 interface SettingsStore {
@@ -47,7 +60,8 @@ interface SettingsStore {
 }
 
 const defaultSettings: Settings = {
-  supaDataApiKey: '',
+  supaDataApiKey: '', // Legacy
+  supaDataApiKeys: [], // NEW - Multiple keys
   deepSeekApiKey: '',
   geminiApiKey: '',
   openRouterApiKey: '',
@@ -77,6 +91,8 @@ const defaultSettings: Settings = {
   monitoringAIModel: 'deepseek',
   supabaseUrl: '',
   supabaseAnonKey: '',
+  // SupaData key management
+  autoRemoveExhaustedKeys: false, // Don't auto-remove by default
 };
 
 export const useSettingsStore = create<SettingsStore>()(

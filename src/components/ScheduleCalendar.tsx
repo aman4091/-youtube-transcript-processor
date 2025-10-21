@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import NavigationBar from './NavigationBar';
 import { supabase } from '../services/supabaseClient';
+import { useTempQueueStore } from '../stores/tempQueueStore';
 
 interface DateSummary {
   date: string;
@@ -13,7 +15,30 @@ interface DateSummary {
   old_count: number;
 }
 
-const ScheduleCalendar: React.FC = () => {
+interface ScheduleCalendarProps {
+  onNavigateHome: () => void;
+  onNavigateHistory: () => void;
+  onNavigateShorts: () => void;
+  onNavigateTitle: () => void;
+  onNavigateMonitoring: () => void;
+  onNavigateSettings: () => void;
+  onNavigateScheduleToday: () => void;
+  onNavigateScheduleCalendar: () => void;
+  onPushToChat?: () => void;
+}
+
+const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
+  onNavigateHome,
+  onNavigateHistory,
+  onNavigateShorts,
+  onNavigateTitle,
+  onNavigateMonitoring,
+  onNavigateSettings,
+  onNavigateScheduleToday,
+  onNavigateScheduleCalendar,
+  onPushToChat,
+}) => {
+  const { getQueueCount } = useTempQueueStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [schedules, setSchedules] = useState<Record<string, DateSummary>>({});
   const [loading, setLoading] = useState(false);
@@ -125,7 +150,10 @@ const ScheduleCalendar: React.FC = () => {
 
   const formatDate = (date: Date | null): string => {
     if (!date) return '';
-    return date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const getDaySchedule = (date: Date | null): DateSummary | null => {
@@ -163,208 +191,227 @@ const ScheduleCalendar: React.FC = () => {
   });
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Schedule Calendar</h1>
-        <p className="text-gray-600">Overview of all scheduled publishing dates</p>
-      </div>
+    <div className="min-h-screen bg-gray-900 text-gray-100">
+      <NavigationBar
+        currentPage="schedule-calendar"
+        onNavigateHome={onNavigateHome}
+        onNavigateHistory={onNavigateHistory}
+        onNavigateShorts={onNavigateShorts}
+        onNavigateTitle={onNavigateTitle}
+        onNavigateMonitoring={onNavigateMonitoring}
+        onNavigateScheduleToday={onNavigateScheduleToday}
+        onNavigateScheduleCalendar={onNavigateScheduleCalendar}
+        onNavigateSettings={onNavigateSettings}
+        queueCount={getQueueCount()}
+        onPushToChat={onPushToChat}
+      />
 
-      {/* Calendar Controls */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <button
-            onClick={previousMonth}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            ← Previous
-          </button>
-
-          <h2 className="text-2xl font-bold text-gray-900">{monthName}</h2>
-
-          <button
-            onClick={nextMonth}
-            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200"
-          >
-            Next →
-          </button>
+      <div className="max-w-7xl mx-auto p-6">
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-100 mb-2">📅 Schedule Calendar</h1>
+          <p className="text-gray-400">Overview of all scheduled publishing dates</p>
         </div>
 
-        {/* Legend */}
-        <div className="flex items-center gap-4 text-sm text-gray-600">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-gray-400"></div>
-            <span>Pending</span>
+        {/* Calendar Controls */}
+        <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={previousMonth}
+              className="px-4 py-2 bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              ← Previous
+            </button>
+
+            <h2 className="text-2xl font-bold text-gray-100">{monthName}</h2>
+
+            <button
+              onClick={nextMonth}
+              className="px-4 py-2 bg-gray-700 text-gray-200 rounded-lg hover:bg-gray-600 transition-colors"
+            >
+              Next →
+            </button>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-blue-500"></div>
-            <span>Processing</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-green-500"></div>
-            <span>Ready</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-purple-500"></div>
-            <span>Published</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-red-500"></div>
-            <span>Failed</span>
+
+          {/* Legend */}
+          <div className="flex items-center gap-4 text-sm text-gray-300">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-gray-400"></div>
+              <span>Pending</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-blue-500"></div>
+              <span>Processing</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-green-500"></div>
+              <span>Ready</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-purple-500"></div>
+              <span>Published</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-500"></div>
+              <span>Failed</span>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Calendar Grid */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-600">Loading calendar...</div>
-      ) : (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          {/* Weekday Headers */}
-          <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
-            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-              <div
-                key={day}
-                className="px-3 py-3 text-center text-sm font-semibold text-gray-700"
-              >
-                {day}
-              </div>
-            ))}
-          </div>
-
-          {/* Calendar Days */}
-          <div className="grid grid-cols-7">
-            {days.map((date, index) => {
-              const schedule = getDaySchedule(date);
-              const today = isToday(date);
-
-              return (
+        {/* Calendar Grid */}
+        {loading ? (
+          <div className="text-center py-12 text-gray-400">Loading calendar...</div>
+        ) : (
+          <div className="bg-gray-800 rounded-lg shadow-sm border border-gray-700 overflow-hidden">
+            {/* Weekday Headers */}
+            <div className="grid grid-cols-7 bg-gray-700 border-b border-gray-600">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
                 <div
-                  key={index}
-                  onClick={() => date && schedule && setSelectedDate(schedule)}
-                  className={`
-                    min-h-24 p-2 border-b border-r border-gray-200
-                    ${!date ? 'bg-gray-50' : 'bg-white hover:bg-gray-50'}
-                    ${schedule ? 'cursor-pointer' : ''}
-                    ${today ? 'ring-2 ring-blue-500 ring-inset' : ''}
-                  `}
+                  key={day}
+                  className="px-3 py-3 text-center text-sm font-semibold text-gray-200"
                 >
-                  {date && (
-                    <>
-                      <div className="flex items-center justify-between mb-2">
-                        <span
-                          className={`
-                            text-sm font-medium
-                            ${today ? 'text-blue-600 font-bold' : 'text-gray-700'}
-                          `}
-                        >
-                          {date.getDate()}
-                        </span>
-                        {today && (
-                          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">
-                            Today
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Calendar Days */}
+            <div className="grid grid-cols-7">
+              {days.map((date, index) => {
+                const schedule = getDaySchedule(date);
+                const today = isToday(date);
+
+                return (
+                  <div
+                    key={index}
+                    onClick={() => date && schedule && setSelectedDate(schedule)}
+                    className={`
+                      min-h-24 p-2 border-b border-r border-gray-600
+                      ${!date ? 'bg-gray-700' : 'bg-gray-800 hover:bg-gray-700'}
+                      ${schedule ? 'cursor-pointer' : ''}
+                      ${today ? 'ring-2 ring-blue-500 ring-inset' : ''}
+                    `}
+                  >
+                    {date && (
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <span
+                            className={`
+                              text-sm font-medium
+                              ${today ? 'text-blue-400 font-bold' : 'text-gray-200'}
+                            `}
+                          >
+                            {date.getDate()}
                           </span>
-                        )}
-                      </div>
+                          {today && (
+                            <span className="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded">
+                              Today
+                            </span>
+                          )}
+                        </div>
 
-                      {schedule && (
-                        <div className="space-y-1">
-                          {/* Status Bar */}
-                          <div
-                            className={`h-1.5 rounded ${getStatusBarColor(schedule)}`}
-                          ></div>
+                        {schedule && (
+                          <div className="space-y-1">
+                            {/* Status Bar */}
+                            <div
+                              className={`h-1.5 rounded ${getStatusBarColor(schedule)}`}
+                            ></div>
 
-                          {/* Stats */}
-                          <div className="text-xs text-gray-600">
-                            <div>📊 {schedule.total} videos</div>
-                            <div className="flex gap-2">
-                              <span>🆕 {schedule.new_count}</span>
-                              <span>📺 {schedule.old_count}</span>
+                            {/* Stats */}
+                            <div className="text-xs text-gray-300">
+                              <div>📊 {schedule.total} videos</div>
+                              <div className="flex gap-2">
+                                <span>🆕 {schedule.new_count}</span>
+                                <span>📺 {schedule.old_count}</span>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })}
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Selected Date Details Modal */}
-      {selectedDate && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
-          onClick={() => setSelectedDate(null)}
-        >
+        {/* Selected Date Details Modal */}
+        {selectedDate && (
           <div
-            className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4"
-            onClick={(e) => e.stopPropagation()}
+            className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
+            onClick={() => setSelectedDate(null)}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-gray-900">
-                📅 {selectedDate.date}
-              </h3>
-              <button
-                onClick={() => setSelectedDate(null)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                <span className="text-gray-700">Total Videos</span>
-                <span className="font-bold text-gray-900">{selectedDate.total}</span>
+            <div
+              className="bg-gray-800 rounded-lg shadow-xl p-6 max-w-md w-full mx-4 border border-gray-700"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-bold text-gray-100">
+                  📅 {selectedDate.date}
+                </h3>
+                <button
+                  onClick={() => setSelectedDate(null)}
+                  className="text-gray-400 hover:text-gray-200"
+                >
+                  ✕
+                </button>
               </div>
 
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                <span className="text-gray-700">New Videos</span>
-                <span className="font-bold text-green-600">
-                  {selectedDate.new_count}
-                </span>
-              </div>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 bg-gray-700 rounded">
+                  <span className="text-gray-200">Total Videos</span>
+                  <span className="font-bold text-gray-100">{selectedDate.total}</span>
+                </div>
 
-              <div className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                <span className="text-gray-700">Old Videos</span>
-                <span className="font-bold text-blue-600">{selectedDate.old_count}</span>
-              </div>
+                <div className="flex items-center justify-between p-3 bg-gray-700 rounded">
+                  <span className="text-gray-200">New Videos</span>
+                  <span className="font-bold text-green-400">
+                    {selectedDate.new_count}
+                  </span>
+                </div>
 
-              <div className="border-t pt-3 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Pending</span>
-                  <span className="font-medium">{selectedDate.pending}</span>
+                <div className="flex items-center justify-between p-3 bg-gray-700 rounded">
+                  <span className="text-gray-200">Old Videos</span>
+                  <span className="font-bold text-blue-400">{selectedDate.old_count}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-blue-600">Processing</span>
-                  <span className="font-medium">{selectedDate.processing}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-green-600">Ready</span>
-                  <span className="font-medium">{selectedDate.ready}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-purple-600">Published</span>
-                  <span className="font-medium">{selectedDate.published}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-red-600">Failed</span>
-                  <span className="font-medium">{selectedDate.failed}</span>
-                </div>
-              </div>
 
-              <a
-                href={`/schedule-today?date=${selectedDate.date}`}
-                className="block w-full mt-4 px-4 py-2 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700"
-              >
-                View Full Schedule →
-              </a>
+                <div className="border-t border-gray-600 pt-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-300">Pending</span>
+                    <span className="font-medium text-gray-200">{selectedDate.pending}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-400">Processing</span>
+                    <span className="font-medium text-gray-200">{selectedDate.processing}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-400">Ready</span>
+                    <span className="font-medium text-gray-200">{selectedDate.ready}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-purple-400">Published</span>
+                    <span className="font-medium text-gray-200">{selectedDate.published}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-400">Failed</span>
+                    <span className="font-medium text-gray-200">{selectedDate.failed}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    setSelectedDate(null);
+                    onNavigateScheduleToday();
+                  }}
+                  className="block w-full mt-4 px-4 py-2 bg-blue-600 text-white text-center rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  View Full Schedule →
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
