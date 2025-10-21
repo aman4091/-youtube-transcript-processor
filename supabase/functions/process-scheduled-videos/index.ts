@@ -36,13 +36,13 @@ serve(async (req) => {
       throw new Error('Settings not found');
     }
 
-    // Fetch pending videos (limit 5 per run)
+    // Fetch pending videos (limit 1 per run - process one at a time)
     const { data: pendingVideos, error } = await supabase
       .from('scheduled_videos')
       .select('*')
       .eq('status', 'pending')
       .order('created_at', { ascending: true })
-      .limit(5);
+      .limit(1);
 
     if (error) {
       throw new Error(`Failed to fetch pending videos: ${error.message}`);
@@ -171,20 +171,8 @@ serve(async (req) => {
   }
 });
 
-// Timeout wrapper for chunk processing (60 seconds)
-async function processChunkWithTimeout(
-  promise: Promise<any>,
-  timeoutMs: number = 60000
-): Promise<any> {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Chunk timeout after 60 seconds')), timeoutMs)
-    ),
-  ]);
-}
-
 // Process old video with full pipeline and resume capability
+// NO TIMEOUT - let Gemini take as much time as it needs
 async function processOldVideo(video: any, settings: any, supabase: any) {
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
@@ -214,7 +202,8 @@ async function processOldVideo(video: any, settings: any, supabase: any) {
       const chunkPrompt = settings.custom_prompt || 'Process this transcript:';
       const fullPrompt = totalChunks > 1 ? `${chunkPrompt}\n\n[Part ${i + 1} of ${totalChunks}]` : chunkPrompt;
 
-      const processingPromise = (async () => {
+      // Process chunk without timeout - let Gemini take as long as it needs
+      try {
         let aiResult;
         if (settings.ai_model === 'deepseek') {
           aiResult = await processWithDeepSeek(fullPrompt, chunk, settings.deepseek_api_key);
@@ -223,19 +212,14 @@ async function processOldVideo(video: any, settings: any, supabase: any) {
         }
         if (aiResult.error) throw new Error(aiResult.error);
         console.log(`✅ [${i + 1}] Done (${aiResult.content.length} chars)`);
-        return { index: i, content: aiResult.content };
-      })();
-
-      try {
-        const result = await processChunkWithTimeout(processingPromise);
-        return { ...result, status: 'fulfilled' };
+        return { index: i, content: aiResult.content, status: 'fulfilled' };
       } catch (error: any) {
         console.error(`❌ [${i + 1}] FAILED:`, error.message);
         return { index: i, error: error.message, status: 'rejected' };
       }
     });
 
-    console.log(`⏳ Waiting for chunks (60s timeout per chunk)...`);
+    console.log(`⏳ Waiting for all chunks to complete (no timeout)...`);
     const startTime = Date.now();
     const results = await Promise.allSettled(chunkPromises);
     const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
