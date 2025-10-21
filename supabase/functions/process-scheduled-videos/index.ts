@@ -545,13 +545,18 @@ async function getGoogleDriveConfig(supabase: any): Promise<any | null> {
  */
 async function getAccessToken(config: any): Promise<string | null> {
   try {
+    const tokenData = config.tokenData;
+    if (!tokenData) {
+      throw new Error('tokenData not found in config');
+    }
+
     const response = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        refresh_token: config.refreshToken,
+        client_id: tokenData.client_id,
+        client_secret: tokenData.client_secret,
+        refresh_token: tokenData.refresh_token,
         grant_type: 'refresh_token',
       }),
     });

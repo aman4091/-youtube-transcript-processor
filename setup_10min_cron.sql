@@ -4,10 +4,8 @@
 -- Enable pg_cron extension (if not already enabled)
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 
--- Remove old cron job if exists
-SELECT cron.unschedule('process-chunks-every-10-min');
-
 -- Schedule Edge Function to run every 10 minutes
+-- (If already exists, this will fail - that's okay, just ignore the error)
 SELECT cron.schedule(
   'process-chunks-every-10-min',
   '*/10 * * * *', -- Every 10 minutes
