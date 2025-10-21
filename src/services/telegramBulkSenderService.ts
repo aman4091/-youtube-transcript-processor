@@ -4,7 +4,7 @@
 // =====================================================
 
 import { supabase } from './supabaseClient';
-import { getFileContent } from './googleDrivePickleService';
+
 import type { ScheduledVideo, TelegramSendResult } from '../types/scheduling';
 
 /**
@@ -153,6 +153,39 @@ async function sendVideoToTelegram(
   }
 }
 
+
+/**
+ * Get file content from Google Drive via Edge Function
+ */
+async function getFileContent(filePath: string): Promise<string | null> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-drive-file`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filePath }),
+      }
+    );
+
+    const data = await response.json();
+
+    if (!data.success) {
+      throw new Error(data.error || 'Failed to fetch file');
+    }
+
+    return data.content;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Error fetching file:', error.message);
+    return null;
+  }
+}
 /**
  * Sanitize filename (remove invalid chars)
  */
