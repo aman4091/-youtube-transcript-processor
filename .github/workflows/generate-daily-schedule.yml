@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Generate tomorrow's schedule
+      - name: Generate today's schedule
         run: |
           curl -X POST \
             "${{ secrets.SUPABASE_URL }}/functions/v1/generate-daily-schedule" \
