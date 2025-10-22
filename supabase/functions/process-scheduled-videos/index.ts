@@ -82,8 +82,17 @@ serve(async (req) => {
         const result = await processOldVideo(video, settings, supabase);
 
         if (result.success) {
-          // All chunks complete - upload to Google Drive
-          console.log(`📤 Uploading to Google Drive...`);
+          // All chunks complete - upload both raw transcript and processed script to Google Drive
+          console.log(`📤 Uploading raw transcript to Google Drive...`);
+          const rawTranscriptPath = await uploadRawTranscriptToGoogleDrive(
+            video.schedule_date,
+            video.target_channel_name,
+            video.slot_number,
+            result.rawTranscript,
+            supabase
+          );
+
+          console.log(`📤 Uploading processed script to Google Drive...`);
           const drivePath = await uploadToGoogleDrive(
             video.schedule_date,
             video.target_channel_name,
@@ -98,12 +107,19 @@ serve(async (req) => {
             console.log(`⚠️ Google Drive upload failed, continuing anyway`);
           }
 
-          // Mark as ready
+          if (rawTranscriptPath) {
+            console.log(`✅ Raw transcript uploaded: ${rawTranscriptPath}`);
+          } else {
+            console.log(`⚠️ Raw transcript upload failed, continuing anyway`);
+          }
+
+          // Mark as ready with both paths
           await supabase
             .from('scheduled_videos')
             .update({
               status: 'ready',
               processed_script_path: drivePath,
+              raw_transcript_path: rawTranscriptPath,
               processing_completed_at: new Date().toISOString(),
             })
             .eq('id', video.id);
@@ -240,7 +256,7 @@ async function processOldVideo(video: any, settings: any, supabase: any) {
       const sortedResults = allChunkResults.sort((a: any, b: any) => a.index - b.index);
       const finalScript = sortedResults.map((r: any) => r.content).join('\n\n');
       console.log(`🎉 ALL COMPLETE! Script: ${finalScript.length} chars`);
-      return { success: true, totalChunks, completedChunks: completedCount, finalScript };
+      return { success: true, totalChunks, completedChunks: completedCount, finalScript, rawTranscript: transcript };
     } else {
       console.log(`⚠️ Partial (${completedCount}/${totalChunks}) - will resume next run`);
       return { success: false, partialSuccess: true, totalChunks, completedChunks: completedCount, error: `${failedChunks.length} chunks failed` };
@@ -700,6 +716,58 @@ async function uploadToGoogleDrive(
     return filePath;
   } catch (error: any) {
     console.error('[GoogleDrive] Upload error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Upload raw transcript (from SupaData) to Google Drive
+ * Similar to uploadToGoogleDrive but saves as VideoN_raw.txt
+ */
+async function uploadRawTranscriptToGoogleDrive(
+  scheduleDate: string,
+  channelName: string,
+  slotNumber: number,
+  rawTranscript: string,
+  supabase: any
+): Promise<string | null> {
+  try {
+    console.log(`[GoogleDrive] Uploading raw transcript ${scheduleDate}/${channelName}/Video${slotNumber}_raw`);
+
+    const config = await getGoogleDriveConfig(supabase);
+    if (!config) {
+      console.log('[GoogleDrive] Config not found, skipping raw transcript upload');
+      return null;
+    }
+
+    const accessToken = await getAccessToken(config);
+    if (!accessToken) {
+      console.log('[GoogleDrive] Failed to get access token for raw transcript');
+      return null;
+    }
+
+    // Create folder structure: Schedule/YYYY-MM-DD/ChannelName/
+    const scheduleFolderId = await createOrGetFolder('Schedule', config.folderId, accessToken);
+    if (!scheduleFolderId) return null;
+
+    const dateFolderId = await createOrGetFolder(scheduleDate, scheduleFolderId, accessToken);
+    if (!dateFolderId) return null;
+
+    const channelFolderId = await createOrGetFolder(channelName, dateFolderId, accessToken);
+    if (!channelFolderId) return null;
+
+    // Upload raw transcript file
+    const fileName = `Video${slotNumber}_raw.txt`;
+    const fileId = await uploadFile(fileName, rawTranscript, channelFolderId, accessToken);
+
+    if (!fileId) return null;
+
+    const filePath = `Schedule/${scheduleDate}/${channelName}/${fileName}`;
+    console.log(`[GoogleDrive] ✅ Uploaded raw transcript: ${filePath}`);
+
+    return filePath;
+  } catch (error: any) {
+    console.error('[GoogleDrive] Raw transcript upload error:', error.message);
     return null;
   }
 }

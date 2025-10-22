@@ -3,7 +3,13 @@
     "allow": [
       "Bash(for dir in */)",
       "Bash(do echo \"=== $dir%/ ===\")",
-      "Bash(while read dir)"
+      "Bash(while read dir)",
+      "Bash(supabase functions deploy:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Bash(npm run build:*)"
     ],
     "deny": [],
     "ask": []

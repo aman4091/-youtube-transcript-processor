@@ -8,7 +8,9 @@ import {
   AlertCircle,
   Youtube,
   History,
+  Edit,
 } from 'lucide-react';
+import TranscriptEditModal from './TranscriptEditModal';
 import NavigationBar from './NavigationBar';
 import { supabase } from '../services/supabaseClient';
 import { useTempQueueStore } from '../stores/tempQueueStore';
@@ -47,6 +49,7 @@ export default function ScheduleToday({
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [editingVideo, setEditingVideo] = useState<ScheduledVideo | null>(null);
 
   const [stats, setStats] = useState({
     total: 0,
@@ -396,14 +399,26 @@ export default function ScheduleToday({
                           )}
                         </div>
 
-                        <a
-                          href={`https://www.youtube.com/watch?v=${video.video_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="ml-4 px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
-                        >
-                          YouTube
-                        </a>
+                        <div className="ml-4 flex flex-col gap-2">
+                          {video.status === 'ready' && video.raw_transcript_path && (
+                            <button
+                              onClick={() => setEditingVideo(video)}
+                              className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1"
+                              title="Edit script manually"
+                            >
+                              <Edit className="w-4 h-4" />
+                              Edit Script
+                            </button>
+                          )}
+                          <a
+                            href={`https://www.youtube.com/watch?v=${video.video_id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3 py-1 text-sm bg-red-600 hover:bg-red-700 text-white rounded transition-colors text-center"
+                          >
+                            YouTube
+                          </a>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -413,6 +428,20 @@ export default function ScheduleToday({
           </div>
         )}
       </div>
+
+      {/* Transcript Edit Modal */}
+      {editingVideo && (
+        <TranscriptEditModal
+          videoId={editingVideo.id}
+          videoTitle={editingVideo.video_title}
+          rawTranscriptPath={editingVideo.raw_transcript_path}
+          onClose={() => setEditingVideo(null)}
+          onSuccess={() => {
+            setEditingVideo(null);
+            loadSchedule(); // Refresh videos list
+          }}
+        />
+      )}
     </div>
   );
 }
