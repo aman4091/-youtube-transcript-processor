@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Youtube, Send } from 'lucide-react';
+import { Youtube } from 'lucide-react';
 import { isValidYouTubeUrl } from '../utils/linkValidator';
 import { useHistoryStore } from '../stores/historyStore';
 
