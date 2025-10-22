@@ -74,6 +74,21 @@ export default function TranscriptEditModal({
     }
   };
 
+  // Clean text: remove asterisks, lines, and double quotes
+  const cleanText = (text: string): string => {
+    return text
+      // Remove asterisks
+      .replace(/\*/g, '')
+      // Remove horizontal lines (---, ===, ___, etc.)
+      .replace(/^[-=_]{3,}$/gm, '')
+      // Remove double quotes
+      .replace(/"/g, '')
+      // Remove multiple blank lines (keep max 2 newlines)
+      .replace(/\n{3,}/g, '\n\n')
+      // Trim whitespace
+      .trim();
+  };
+
   // Submit edited output to update Google Drive
   const handleSubmit = async () => {
     if (!outputText.trim()) {
@@ -88,8 +103,11 @@ export default function TranscriptEditModal({
 
       const token = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+      // Clean the text before uploading
+      const cleanedText = cleanText(outputText);
+
       // Update processed script in Google Drive
-      await updateProcessedScript(videoId, outputText, token);
+      await updateProcessedScript(videoId, cleanedText, token);
 
       setSuccessMessage('✅ Script updated successfully!');
 
