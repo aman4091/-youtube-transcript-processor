@@ -41,6 +41,7 @@ serve(async (req) => {
       .from('scheduled_videos')
       .select('*')
       .eq('status', 'pending')
+      .order('schedule_date', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(1);
 
