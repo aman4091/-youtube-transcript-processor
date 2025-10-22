@@ -24,10 +24,10 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get date (tomorrow by default)
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const date = tomorrow.toISOString().split('T')[0];
+    // Get date (today by default)
+    const today = new Date();
+    
+    const date = today.toISOString().split('T')[0];
 
     // Fetch config
     const { data: config, error: configError } = await supabase
