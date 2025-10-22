@@ -1,4 +1,8 @@
-// Supabase Edge Function: generate-daily-schedule
+// Auto-fix script for 7-day rolling schedule
+const fs = require('fs');
+const path = require('path');
+
+const content = `// Supabase Edge Function: generate-daily-schedule
 // Generates 7-day rolling schedule with smart video selection and uniqueness rules
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -54,7 +58,7 @@ serve(async (req) => {
       datesToGenerate.push(date.toISOString().split('T')[0]);
     }
 
-    console.log(`📅 Checking dates: ${datesToGenerate.join(', ')}`);
+    console.log(\`📅 Checking dates: \${datesToGenerate.join(', ')}\`);
 
     // Check which dates already exist
     const { data: existingSchedules } = await supabase
@@ -83,7 +87,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`🆕 Generating schedules for: ${missingDates.join(', ')}`);
+    console.log(\`🆕 Generating schedules for: \${missingDates.join(', ')}\`);
 
     const targetChannels = config.target_channels || [];
     if (targetChannels.length === 0) {
@@ -95,7 +99,7 @@ serve(async (req) => {
 
     // Generate schedule for each missing date
     for (const date of missingDates) {
-      console.log(`\n📆 Generating schedule for ${date}...`);
+      console.log(\`\\n📆 Generating schedule for \${date}...\`);
 
       // Calculate day number
       const dayNumber = Math.floor(
@@ -106,7 +110,7 @@ serve(async (req) => {
       const newPerChannel = requiresNew ? 1 : 0;
       const oldPerChannel = requiresNew ? 3 : 4;
 
-      console.log(`Day ${dayNumber}: ${newPerChannel} new + ${oldPerChannel} old per channel`);
+      console.log(\`Day \${dayNumber}: \${newPerChannel} new + \${oldPerChannel} old per channel\`);
 
       // Select videos for each channel
       const usedToday: string[] = [];
@@ -154,7 +158,7 @@ serve(async (req) => {
           totalVideosScheduled++;
         }
 
-        console.log(`  ✓ ${channel.name}: ${channelVideos.length} videos scheduled`);
+        console.log(\`  ✓ \${channel.name}: \${channelVideos.length} videos scheduled\`);
       }
     }
 
@@ -165,9 +169,9 @@ serve(async (req) => {
       .update({ last_schedule_generated_date: lastGeneratedDate })
       .eq('user_id', 'default_user');
 
-    console.log(`\n✅ Schedule generation complete!`);
-    console.log(`   Dates generated: ${missingDates.length}`);
-    console.log(`   Total videos: ${totalVideosScheduled}`);
+    console.log(\`\\n✅ Schedule generation complete!\`);
+    console.log(\`   Dates generated: \${missingDates.length}\`);
+    console.log(\`   Total videos: \${totalVideosScheduled}\`);
 
     return new Response(
       JSON.stringify({
@@ -221,12 +225,12 @@ async function selectVideos(supabase: any, type: string, channelId: string, excl
     .from(table)
     .select('*')
     .eq('status', 'active')
-    .not('video_id', 'in', `(${excludeAll.length > 0 ? excludeAll.join(',') : 'NULL'})`)
+    .not('video_id', 'in', \`(\${excludeAll.length > 0 ? excludeAll.join(',') : 'NULL'})\`)
     .order(type === 'old' ? 'view_count' : 'added_at', { ascending: false })
     .limit(count * 2);
 
   if (!videos || videos.length < count) {
-    throw new Error(`Not enough ${type} videos for channel ${channelId}`);
+    throw new Error(\`Not enough \${type} videos for channel \${channelId}\`);
   }
 
   return videos.slice(0, count).map((v: any) => ({
@@ -248,3 +252,13 @@ function shuffleArray(arr: any[]) {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 }
+`;
+
+const filePath = path.join(__dirname, 'supabase/functions/generate-daily-schedule/index.ts');
+
+console.log('🔧 Fixing 7-day rolling schedule...');
+fs.writeFileSync(filePath, content, 'utf8');
+console.log('✅ File updated successfully!');
+console.log('📁', filePath);
+console.log('\n🚀 Next step: Deploy to Supabase');
+console.log('   Run: supabase functions deploy generate-daily-schedule');
