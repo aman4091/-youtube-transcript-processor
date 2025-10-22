@@ -25,11 +25,15 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get date from request body
+    // Get video IDs from request body
     const body = await req.json();
-    const date = body.date || getTodayDate();
+    const videoIds = body.video_ids;
 
-    console.log(`📅 Date: ${date}`);
+    if (!videoIds || !Array.isArray(videoIds) || videoIds.length === 0) {
+      throw new Error('video_ids array is required');
+    }
+
+    console.log(`📹 Pushing ${videoIds.length} selected videos`);
 
     // Get settings
     const { data: config } = await supabase
@@ -49,11 +53,11 @@ serve(async (req) => {
       throw new Error('Telegram credentials not configured');
     }
 
-    // Fetch all ready videos for the date
+    // Fetch selected videos by IDs
     const { data: videos, error } = await supabase
       .from('scheduled_videos')
       .select('*')
-      .eq('schedule_date', date)
+      .in('id', videoIds)
       .eq('status', 'ready')
       .order('target_channel_name', { ascending: true })
       .order('slot_number', { ascending: true });

@@ -50,6 +50,7 @@ export default function ScheduleToday({
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [editingVideo, setEditingVideo] = useState<ScheduledVideo | null>(null);
+  const [selectedVideoIds, setSelectedVideoIds] = useState<Set<number>>(new Set());
 
   const [stats, setStats] = useState({
     total: 0,
@@ -99,13 +100,34 @@ export default function ScheduleToday({
     }
   };
 
+  const toggleVideoSelection = (videoId: number) => {
+    setSelectedVideoIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(videoId)) {
+        newSet.delete(videoId);
+      } else {
+        newSet.add(videoId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllReady = () => {
+    const readyVideoIds = videos.filter(v => v.status === 'ready').map(v => v.id);
+    setSelectedVideoIds(new Set(readyVideoIds));
+  };
+
+  const deselectAll = () => {
+    setSelectedVideoIds(new Set());
+  };
+
   const handleBulkPushToTelegram = async () => {
-    if (stats.ready === 0) {
-      setError('No ready videos to push!');
+    if (selectedVideoIds.size === 0) {
+      setError('Please select at least one video to push!');
       return;
     }
 
-    if (!confirm(`Push ${stats.ready} ready videos to Telegram?`)) {
+    if (!confirm(`Push ${selectedVideoIds.size} selected videos to Telegram?`)) {
       return;
     }
 
@@ -125,7 +147,9 @@ export default function ScheduleToday({
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
-          body: JSON.stringify({ date: scheduleDate }),
+          body: JSON.stringify({
+            video_ids: Array.from(selectedVideoIds)
+          }),
         }
       );
 
@@ -133,6 +157,7 @@ export default function ScheduleToday({
 
       if (result.success) {
         setSuccessMessage(`Successfully pushed ${result.sent} videos to Telegram!`);
+        setSelectedVideoIds(new Set()); // Clear selection
         loadSchedule();
       } else {
         throw new Error(result.error || 'Unknown error');
@@ -242,9 +267,26 @@ export default function ScheduleToday({
               />
             </div>
 
+            <div className="flex items-center gap-2">
+              <button
+                onClick={selectAllReady}
+                disabled={stats.ready === 0}
+                className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                Select All Ready
+              </button>
+              <button
+                onClick={deselectAll}
+                disabled={selectedVideoIds.size === 0}
+                className="px-4 py-2 text-sm bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
+              >
+                Deselect All
+              </button>
+            </div>
+
             <button
               onClick={handleBulkPushToTelegram}
-              disabled={pushing || stats.ready === 0}
+              disabled={pushing || selectedVideoIds.size === 0}
               className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
             >
               {pushing ? (
@@ -255,7 +297,7 @@ export default function ScheduleToday({
               ) : (
                 <>
                   <Send className="w-5 h-5" />
-                  Push to Telegram ({stats.ready} ready)
+                  Push to Telegram ({selectedVideoIds.size} selected)
                 </>
               )}
             </button>
@@ -361,8 +403,17 @@ export default function ScheduleToday({
                   {channelVideos.map((video) => (
                     <div key={video.id} className="p-4 hover:bg-gray-700/50 transition-colors">
                       <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
+                        <div className="flex items-center gap-3">
+                          {video.status === 'ready' && (
+                            <input
+                              type="checkbox"
+                              checked={selectedVideoIds.has(video.id)}
+                              onChange={() => toggleVideoSelection(video.id)}
+                              className="w-5 h-5 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                            />
+                          )}
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
                             <span className="px-2 py-1 bg-gray-700 text-gray-300 rounded text-sm font-medium">
                               Slot {video.slot_number}
                             </span>
@@ -397,6 +448,7 @@ export default function ScheduleToday({
                               ❌ {video.error_message}
                             </div>
                           )}
+                          </div>
                         </div>
 
                         <div className="ml-4 flex flex-col gap-2">
