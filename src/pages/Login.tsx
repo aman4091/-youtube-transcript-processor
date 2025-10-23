@@ -58,13 +58,65 @@ export default function Login() {
         // Load settings
         if (userData.data.settings) {
           console.log('✓ Loading settings from database');
-          updateSettings(userData.data.settings);
+
+          // Transform database format to store format
+          const dbSettings = userData.data.settings;
+          const storeSettings = {
+            // API Keys
+            supaDataApiKeys: dbSettings.api_keys?.supaDataApiKeys || [],
+            deepSeekApiKey: dbSettings.api_keys?.deepSeekApiKey || '',
+            geminiApiKey: dbSettings.api_keys?.geminiApiKey || '',
+            openRouterApiKey: dbSettings.api_keys?.openRouterApiKey || '',
+            youtubeApiKey: dbSettings.api_keys?.youtubeApiKey || '',
+
+            // Channels
+            channelUrls: dbSettings.source_channels || [],
+            targetChannels: dbSettings.target_channels || [],
+            channelMinDurations: dbSettings.channel_min_durations || {},
+
+            // Prompts
+            customPrompt: dbSettings.prompts?.customPrompt || '',
+            titlePrompt: dbSettings.prompts?.titlePrompt || 'Generate 10 catchy, viral YouTube video titles for the following script. Make them engaging and click-worthy.',
+
+            // Telegram
+            telegramBotToken: dbSettings.telegram_config?.botToken || '',
+            telegramChatId: dbSettings.telegram_config?.chatId || '',
+            telegramChatIdWithTitle: dbSettings.telegram_config?.chatIdWithTitle || '',
+
+            // Preferences
+            enableDeepSeek: dbSettings.preferences?.enableDeepSeek ?? true,
+            enableGeminiFlash: dbSettings.preferences?.enableGeminiFlash ?? true,
+            enableGeminiPro: dbSettings.preferences?.enableGeminiPro ?? true,
+            enableOpenRouter: dbSettings.preferences?.enableOpenRouter ?? true,
+            videoSortOrder: dbSettings.preferences?.videoSortOrder || 'popular',
+            selectedOpenRouterModel: dbSettings.preferences?.selectedOpenRouterModel || '',
+            autoMonitoringEnabled: dbSettings.preferences?.autoMonitoringEnabled ?? false,
+            monitoringIntervalHours: dbSettings.preferences?.monitoringIntervalHours || 2,
+            monitoringAIModel: dbSettings.preferences?.monitoringAIModel || 'deepseek',
+            supabaseUrl: dbSettings.preferences?.supabaseUrl || '',
+            supabaseAnonKey: dbSettings.preferences?.supabaseAnonKey || '',
+            autoRemoveExhaustedKeys: dbSettings.preferences?.autoRemoveExhaustedKeys ?? false,
+          };
+
+          console.log('🔄 Transformed settings:', storeSettings);
+          updateSettings(storeSettings);
         }
 
         // Load history
         if (userData.data.history && userData.data.history.length > 0) {
           console.log(`✓ Loading ${userData.data.history.length} history items`);
-          restoreHistory(userData.data.history);
+
+          // Transform database format to store format
+          const transformedHistory = userData.data.history.map((item: any) => ({
+            url: item.video_url,
+            videoId: item.video_id,
+            title: item.video_title,
+            thumbnail: item.video_thumbnail,
+            channelTitle: item.channel_title,
+            targetChannelProcessings: item.target_processings || [],
+          }));
+
+          restoreHistory(transformedHistory);
         }
 
         // Load queue
