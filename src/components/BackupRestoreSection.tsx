@@ -1,13 +1,24 @@
 import { useState } from 'react';
-import { Download, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, Upload, Loader2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
 import { exportBackup, importBackup, type BackupData } from '../services/userDataSync';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useHistoryStore } from '../stores/historyStore';
+import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useScriptCounterStore } from '../stores/scriptCounterStore';
 
 export default function BackupRestoreSection() {
   const user = useUserStore((state) => state.user);
 
+  // Get sync functions from stores
+  const { syncToDatabase: syncSettings } = useSettingsStore();
+  const { syncToDatabase: syncHistory } = useHistoryStore();
+  const { syncToDatabase: syncQueue } = useTempQueueStore();
+  const { syncToDatabase: syncCounter } = useScriptCounterStore();
+
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Export backup
@@ -114,6 +125,41 @@ export default function BackupRestoreSection() {
     }
   };
 
+  // Sync local localStorage data to database
+  const handleSyncLocalData = async () => {
+    if (!user) {
+      setMessage({ type: 'error', text: 'User not logged in' });
+      return;
+    }
+
+    try {
+      setIsSyncing(true);
+      setMessage(null);
+
+      console.log('🔄 Syncing localStorage data to database...');
+
+      // Sync all stores in parallel
+      await Promise.all([
+        syncSettings(user.id),
+        syncHistory(user.id),
+        syncQueue(user.id),
+        syncCounter(user.id),
+      ]);
+
+      setMessage({
+        type: 'success',
+        text: '✅ All local data synced to database successfully!',
+      });
+
+      console.log('✓ All data synced successfully');
+    } catch (error: any) {
+      console.error('Sync error:', error);
+      setMessage({ type: 'error', text: error.message || 'Failed to sync data' });
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
       <h3 className="text-lg font-semibold text-white mb-4">💾 Backup & Restore</h3>
@@ -174,6 +220,33 @@ export default function BackupRestoreSection() {
               className="hidden"
             />
           </label>
+        </div>
+
+        {/* Sync Local Data Button */}
+        <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-700 to-indigo-700 rounded-lg border-2 border-purple-500">
+          <div>
+            <p className="text-white font-medium">🔄 Sync Local Data to Database</p>
+            <p className="text-sm text-purple-200 mt-1">
+              Push your current localStorage data (API keys, settings, history) to database
+            </p>
+          </div>
+          <button
+            onClick={handleSyncLocalData}
+            disabled={isSyncing}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed transition-colors flex items-center gap-2 font-medium"
+          >
+            {isSyncing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Syncing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Sync Now
+              </>
+            )}
+          </button>
         </div>
 
         {/* Message */}
