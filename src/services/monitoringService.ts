@@ -261,7 +261,7 @@ export async function getChannelStats(): Promise<ChannelStats[]> {
 /**
  * Manually trigger a check for new videos (for testing)
  */
-export async function triggerManualCheck(): Promise<any> {
+export async function triggerManualCheck(user_id: string): Promise<any> {
   try {
     if (!isSupabaseConfigured()) {
       throw new Error('Supabase not configured');
@@ -276,6 +276,7 @@ export async function triggerManualCheck(): Promise<any> {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
       },
+      body: JSON.stringify({ user_id }),
     });
 
     if (!response.ok) {

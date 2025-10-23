@@ -25,25 +25,28 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get settings
-    const { data: settings } = await supabase
-      .from('auto_monitor_settings')
-      .select('*')
-      .eq('user_id', 'default_user')
-      .single();
-
-    if (!settings) {
-      throw new Error('Settings not found');
-    }
+    // Get user_id from request (optional - if not provided, process for all users)
+    const body = await req.json().catch(() => ({}));
+    const user_id = body.user_id;
 
     // Fetch pending videos (limit 1 per run - process one at a time)
-    const { data: pendingVideos, error } = await supabase
+    let query = supabase
       .from('scheduled_videos')
       .select('*')
       .eq('status', 'pending')
       .order('schedule_date', { ascending: true })
       .order('created_at', { ascending: true })
       .limit(1);
+
+    // Filter by user_id if provided
+    if (user_id) {
+      query = query.eq('user_id', user_id);
+      console.log(`👤 Processing for specific user: ${user_id}`);
+    } else {
+      console.log(`👥 Processing for all users`);
+    }
+
+    const { data: pendingVideos, error } = await query;
 
     if (error) {
       throw new Error(`Failed to fetch pending videos: ${error.message}`);
@@ -66,7 +69,19 @@ serve(async (req) => {
 
     for (const video of pendingVideos) {
       try {
-        console.log(`Processing: ${video.video_id} (${video.video_type})`);
+        console.log(`Processing: ${video.video_id} (${video.video_type}) for user ${video.user_id}`);
+
+        // Get settings for this video's user
+        const { data: settings } = await supabase
+          .from('auto_monitor_settings')
+          .select('*')
+          .eq('user_id', video.user_id)
+          .single();
+
+        if (!settings) {
+          console.log(`⚠️ Settings not found for user ${video.user_id}, skipping`);
+          continue;
+        }
 
         // Update status to processing
         await supabase
@@ -77,59 +92,26 @@ serve(async (req) => {
           })
           .eq('id', video.id);
 
-        // Process video (both old and new use same pipeline now)
-        console.log(`Processing ${video.video_type} video: ${video.video_id}`);
-        const result = await processOldVideo(video, settings, supabase);
+        // Fetch transcript only (NO AI processing)
+        console.log(`Fetching transcript for ${video.video_type} video: ${video.video_id}`);
+        const result = await fetchTranscriptOnly(video, settings);
 
         if (result.success) {
-          // All chunks complete - upload both raw transcript and processed script to Google Drive
-          console.log(`📤 Uploading raw transcript to Google Drive...`);
-          const rawTranscriptPath = await uploadRawTranscriptToGoogleDrive(
-            video.schedule_date,
-            video.target_channel_name,
-            video.slot_number,
-            result.rawTranscript,
-            supabase
-          );
+          // Save raw transcript directly in database (NO Google Drive)
+          console.log(`💾 Saving raw transcript to database (${result.rawTranscript.length} chars)...`);
 
-          console.log(`📤 Uploading processed script to Google Drive...`);
-          const drivePath = await uploadToGoogleDrive(
-            video.schedule_date,
-            video.target_channel_name,
-            video.slot_number,
-            result.finalScript,
-            supabase
-          );
-
-          if (drivePath) {
-            console.log(`✅ Uploaded to Google Drive: ${drivePath}`);
-          } else {
-            console.log(`⚠️ Google Drive upload failed, continuing anyway`);
-          }
-
-          if (rawTranscriptPath) {
-            console.log(`✅ Raw transcript uploaded: ${rawTranscriptPath}`);
-          } else {
-            console.log(`⚠️ Raw transcript upload failed, continuing anyway`);
-          }
-
-          // Mark as ready with both paths
+          // Mark as pending (NOT ready - user will manually edit)
           await supabase
             .from('scheduled_videos')
             .update({
-              status: 'ready',
-              processed_script_path: drivePath,
-              raw_transcript_path: rawTranscriptPath,
+              status: 'pending',
+              raw_transcript: result.rawTranscript,
               processing_completed_at: new Date().toISOString(),
             })
             .eq('id', video.id);
 
           processed++;
-          console.log(`✅ ${video.video_type} video ${video.video_id} processed successfully`);
-        } else if (result.partialSuccess) {
-          // Some chunks complete - keep as processing for next run
-          console.log(`⚠️ Partial success: ${result.completedChunks}/${result.totalChunks} chunks done`);
-          console.log(`Will retry failed chunks in next run`);
+          console.log(`✅ ${video.video_type} video ${video.video_id} transcript saved to database`);
         } else {
           throw new Error(result.error);
         }
@@ -178,90 +160,16 @@ serve(async (req) => {
   }
 });
 
-// Process old video with full pipeline and resume capability
-// NO TIMEOUT - let Gemini take as much time as it needs
-async function processOldVideo(video: any, settings: any, supabase: any) {
+// Fetch transcript only (NO AI processing)
+async function fetchTranscriptOnly(video: any, settings: any) {
   try {
     const videoUrl = `https://www.youtube.com/watch?v=${video.video_id}`;
     const transcript = await fetchTranscriptWithRotation(videoUrl, settings);
-    console.log(`Transcript fetched: ${transcript.length} chars`);
+    console.log(`✅ Transcript fetched: ${transcript.length} chars`);
 
-    const chunks = chunkText(transcript, 7000);
-    const totalChunks = chunks.length;
-    console.log(`Split into ${totalChunks} chunks`);
-
-    const existingResults = video.chunk_results || [];
-    const completedIndices = new Set(existingResults.map((r: any) => r.index));
-    console.log(`📦 Found ${existingResults.length} previously completed chunks`);
-    console.log(`🚀 Processing ${totalChunks - existingResults.length} NEW chunks!`);
-
-    await supabase.from('scheduled_videos').update({ total_chunks: totalChunks }).eq('id', video.id);
-
-    const chunkPromises = chunks.map(async (chunk, i) => {
-      if (completedIndices.has(i)) {
-        console.log(`⏭️ [${i + 1}/${totalChunks}] Skipping (already done)`);
-        const existing = existingResults.find((r: any) => r.index === i);
-        return { index: i, content: existing.content, status: 'skipped' };
-      }
-
-      console.log(`[${i + 1}/${totalChunks}] Starting...`);
-
-      const chunkPrompt = settings.custom_prompt || 'Process this transcript:';
-      const fullPrompt = totalChunks > 1 ? `${chunkPrompt}\n\n[Part ${i + 1} of ${totalChunks}]` : chunkPrompt;
-
-      // Process chunk without timeout - let Gemini take as long as it needs
-      try {
-        let aiResult;
-        if (settings.ai_model === 'deepseek') {
-          aiResult = await processWithDeepSeek(fullPrompt, chunk, settings.deepseek_api_key);
-        } else {
-          aiResult = await processWithGeminiFlash(fullPrompt, chunk, settings.gemini_api_key);
-        }
-        if (aiResult.error) throw new Error(aiResult.error);
-        console.log(`✅ [${i + 1}] Done (${aiResult.content.length} chars)`);
-        return { index: i, content: aiResult.content, status: 'fulfilled' };
-      } catch (error: any) {
-        console.error(`❌ [${i + 1}] FAILED:`, error.message);
-        return { index: i, error: error.message, status: 'rejected' };
-      }
-    });
-
-    console.log(`⏳ Waiting for all chunks to complete (no timeout)...`);
-    const startTime = Date.now();
-    const results = await Promise.allSettled(chunkPromises);
-    const processingTime = ((Date.now() - startTime) / 1000).toFixed(2);
-
-    const successfulChunks: any[] = [];
-    const failedChunks: number[] = [];
-
-    results.forEach((result) => {
-      if (result.status === 'fulfilled') {
-        const chunkData = result.value;
-        if (chunkData.status === 'fulfilled' || chunkData.status === 'skipped') {
-          successfulChunks.push({ index: chunkData.index, content: chunkData.content, processed_at: new Date().toISOString() });
-        } else if (chunkData.status === 'rejected') {
-          failedChunks.push(chunkData.index);
-        }
-      }
-    });
-
-    const allChunkResults = [...existingResults.filter((r: any) => !successfulChunks.find(s => s.index === r.index)), ...successfulChunks];
-    const completedCount = allChunkResults.length;
-
-    console.log(`✅ New: ${successfulChunks.length - existingResults.length} | ❌ Failed: ${failedChunks.length} | Total: ${completedCount}/${totalChunks} | Time: ${processingTime}s`);
-
-    await supabase.from('scheduled_videos').update({ chunk_results: allChunkResults, completed_chunks: completedCount, failed_chunks: failedChunks }).eq('id', video.id);
-
-    if (completedCount === totalChunks) {
-      const sortedResults = allChunkResults.sort((a: any, b: any) => a.index - b.index);
-      const finalScript = sortedResults.map((r: any) => r.content).join('\n\n');
-      console.log(`🎉 ALL COMPLETE! Script: ${finalScript.length} chars`);
-      return { success: true, totalChunks, completedChunks: completedCount, finalScript, rawTranscript: transcript };
-    } else {
-      console.log(`⚠️ Partial (${completedCount}/${totalChunks}) - will resume next run`);
-      return { success: false, partialSuccess: true, totalChunks, completedChunks: completedCount, error: `${failedChunks.length} chunks failed` };
-    }
+    return { success: true, rawTranscript: transcript };
   } catch (error: any) {
+    console.error(`❌ Failed to fetch transcript: ${error.message}`);
     return { success: false, error: error.message };
   }
 }

@@ -25,11 +25,21 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get user_id from request
+    const body = await req.json().catch(() => ({}));
+    const user_id = body.user_id;
+
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
+    console.log(`👤 Syncing new video pool for user: ${user_id}`);
+
     // Get last sync time
     const { data: config } = await supabase
       .from('schedule_config')
       .select('updated_at')
-      .eq('user_id', 'default_user')
+      .eq('user_id', user_id)
       .single();
 
     const lastSync = config?.updated_at || new Date(0).toISOString();
@@ -69,6 +79,7 @@ serve(async (req) => {
         .from('video_pool_new')
         .select('id')
         .eq('video_id', video.video_id)
+        .eq('user_id', user_id)
         .single();
 
       if (existingVideo) {
@@ -86,6 +97,7 @@ serve(async (req) => {
         source_channel_id: video.channel_id || 'unknown',
         processed_script_path: null,
         status: 'active',
+        user_id: user_id,
       });
 
       if (insertError) {
@@ -100,7 +112,8 @@ serve(async (req) => {
     // Get total count
     const { count } = await supabase
       .from('video_pool_new')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user_id);
 
     console.log(`✅ Sync complete: ${synced} new, ${existing} existing, ${count} total`);
 

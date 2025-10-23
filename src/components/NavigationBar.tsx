@@ -1,5 +1,7 @@
-import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send, Activity, Calendar, CalendarDays, Menu, X } from 'lucide-react';
+import { Youtube, History, Scissors, Sparkles, Settings as SettingsIcon, Send, Activity, Calendar, CalendarDays, Menu, X, LogOut, User } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useUserStore } from '../stores/userStore';
 
 interface NavigationBarProps {
   currentPage?: 'home' | 'history' | 'shorts' | 'title' | 'monitoring' | 'settings' | 'schedule-today' | 'schedule-calendar';
@@ -29,6 +31,13 @@ export default function NavigationBar({
   queueCount = 0,
 }: NavigationBarProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const { user, logout } = useUserStore();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const getButtonClass = (page: string, isMobile = false) => {
     const isActive = currentPage === page;
@@ -141,6 +150,24 @@ export default function NavigationBar({
               </span>
             </button>
           )}
+
+          {/* User Info & Logout */}
+          <div className="flex items-center gap-2 ml-2 sm:ml-4 border-l border-gray-200 dark:border-gray-700 pl-2 sm:pl-4">
+            <div className="flex items-center gap-2 px-2 sm:px-3 py-1.5 bg-gray-100 dark:bg-gray-700 rounded-lg">
+              <User className="w-4 h-4 text-gray-600 dark:text-gray-400" />
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 hidden sm:inline">
+                {user?.display_name || 'User'}
+              </span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="text-sm font-medium hidden lg:inline">Logout</span>
+            </button>
+          </div>
         </div>
 
         {/* Mobile Dropdown Menu */}

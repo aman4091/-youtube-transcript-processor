@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { syncSettings } from '../services/userDataSync';
 
 export interface TargetChannel {
   id: string;
@@ -57,6 +58,7 @@ interface SettingsStore {
   settings: Settings;
   updateSettings: (settings: Partial<Settings>) => void;
   resetSettings: () => void;
+  syncToDatabase: (user_id: string) => Promise<void>;
 }
 
 const defaultSettings: Settings = {
@@ -97,7 +99,7 @@ const defaultSettings: Settings = {
 
 export const useSettingsStore = create<SettingsStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       settings: defaultSettings,
       updateSettings: (newSettings) => {
         console.log('💾 Saving settings to localStorage:', newSettings);
@@ -106,10 +108,37 @@ export const useSettingsStore = create<SettingsStore>()(
           console.log('✓ Settings updated:', updatedSettings);
           return { settings: updatedSettings };
         });
+
+        // Auto-sync to database (non-blocking)
+        const user_id = localStorage.getItem('user-storage');
+        if (user_id) {
+          try {
+            const userData = JSON.parse(user_id);
+            if (userData?.state?.user?.id) {
+              // Sync in background
+              syncSettings(userData.state.user.id, get().settings, Date.now())
+                .then((result) => {
+                  if (result.hasConflict) {
+                    console.warn('⚠️ Conflict detected during settings sync');
+                    // TODO: Show conflict modal
+                  }
+                })
+                .catch((err) => console.error('Settings sync error:', err));
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
       },
       resetSettings: () => {
         console.log('🔄 Resetting settings to default');
         set({ settings: defaultSettings });
+      },
+      syncToDatabase: async (user_id: string) => {
+        const result = await syncSettings(user_id, get().settings, Date.now());
+        if (result.hasConflict) {
+          console.warn('⚠️ Conflict detected during manual sync');
+        }
       },
     }),
     {

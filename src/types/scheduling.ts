@@ -48,8 +48,10 @@ export interface ScheduledVideo {
   video_title: string;
   video_type: 'old' | 'new';
   status: 'pending' | 'processing' | 'ready' | 'published' | 'failed';
-  processed_script_path: string | null;
-  raw_transcript_path: string | null; // Path to raw transcript from SupaData (VideoN_raw.txt)
+  processed_script: string | null; // Processed script content (stored in database)
+  raw_transcript: string | null; // Raw transcript from SupaData (stored in database)
+  processed_script_path: string | null; // DEPRECATED: Old Google Drive path
+  raw_transcript_path: string | null; // DEPRECATED: Old Google Drive path
   google_drive_file_id: string | null;
   telegram_sent_at: string | null;
   processing_started_at: string | null;

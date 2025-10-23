@@ -14,6 +14,7 @@ import TranscriptEditModal from './TranscriptEditModal';
 import NavigationBar from './NavigationBar';
 import { supabase } from '../services/supabaseClient';
 import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useUserStore } from '../stores/userStore';
 import { syncPublishedVideosToHistory } from '../utils/syncScheduledToHistory';
 import type { ScheduledVideo } from '../types/scheduling';
 
@@ -41,6 +42,7 @@ export default function ScheduleToday({
   onPushToChat,
 }: ScheduleTodayProps) {
   const { getQueueCount } = useTempQueueStore();
+  const { user } = useUserStore();
 
   const [scheduleDate, setScheduleDate] = useState<string>(getTodayDate());
   const [videos, setVideos] = useState<ScheduledVideo[]>([]);
@@ -70,10 +72,17 @@ export default function ScheduleToday({
     setError(null);
 
     try {
+      if (!user) {
+        setError('User not logged in');
+        setLoading(false);
+        return;
+      }
+
       const { data, error: fetchError } = await supabase
         .from('scheduled_videos')
         .select('*')
         .eq('schedule_date', scheduleDate)
+        .eq('user_id', user.id)
         .order('target_channel_name', { ascending: true })
         .order('slot_number', { ascending: true });
 
@@ -127,6 +136,11 @@ export default function ScheduleToday({
       return;
     }
 
+    if (!user) {
+      setError('User not logged in');
+      return;
+    }
+
     if (!confirm(`Push ${selectedVideoIds.size} selected videos to Telegram?`)) {
       return;
     }
@@ -148,7 +162,8 @@ export default function ScheduleToday({
             Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({
-            video_ids: Array.from(selectedVideoIds)
+            video_ids: Array.from(selectedVideoIds),
+            user_id: user.id,
           }),
         }
       );
@@ -452,7 +467,7 @@ export default function ScheduleToday({
                         </div>
 
                         <div className="ml-4 flex flex-col gap-2">
-                          {video.status === 'ready' && video.raw_transcript_path && (
+                          {video.raw_transcript && (video.status === 'pending' || video.status === 'ready') && (
                             <button
                               onClick={() => setEditingVideo(video)}
                               className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors flex items-center gap-1"
@@ -486,7 +501,7 @@ export default function ScheduleToday({
         <TranscriptEditModal
           videoId={editingVideo.id}
           videoTitle={editingVideo.video_title}
-          rawTranscriptPath={editingVideo.raw_transcript_path}
+          rawTranscript={editingVideo.raw_transcript}
           onClose={() => setEditingVideo(null)}
           onSuccess={() => {
             setEditingVideo(null);

@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { X, Copy, Check, Loader2 } from 'lucide-react';
-import { getGoogleDriveFile, updateProcessedScript } from '../services/googleDriveService';
+import { updateProcessedScript } from '../services/googleDriveService';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useUserStore } from '../stores/userStore';
 
 interface TranscriptEditModalProps {
   videoId: number;
   videoTitle: string;
-  rawTranscriptPath: string | null;
+  rawTranscript: string | null;
   onClose: () => void;
   onSuccess: () => void;
 }
@@ -14,48 +15,24 @@ interface TranscriptEditModalProps {
 export default function TranscriptEditModal({
   videoId,
   videoTitle,
-  rawTranscriptPath,
+  rawTranscript,
   onClose,
   onSuccess,
 }: TranscriptEditModalProps) {
   const { settings } = useSettingsStore();
-  const [rawTranscript, setRawTranscript] = useState<string>('');
+  const { user } = useUserStore();
   const [outputText, setOutputText] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(true);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState<string>('');
 
-  // Fetch raw transcript on mount
+  // Check if raw transcript is available
   useEffect(() => {
-    async function fetchTranscript() {
-      if (!rawTranscriptPath) {
-        setError('Raw transcript path not found for this video');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        setLoading(true);
-        setError('');
-
-        // Get Supabase token
-        const token = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-        // Fetch raw transcript from Google Drive
-        const content = await getGoogleDriveFile(rawTranscriptPath, token);
-        setRawTranscript(content);
-      } catch (err: any) {
-        console.error('Error fetching transcript:', err);
-        setError(err.message || 'Failed to load transcript');
-      } finally {
-        setLoading(false);
-      }
+    if (!rawTranscript) {
+      setError('Raw transcript not available for this video');
     }
-
-    fetchTranscript();
-  }, [rawTranscriptPath]);
+  }, [rawTranscript]);
 
   // Copy prompt + transcript to clipboard
   const handleCopy = async () => {
@@ -96,6 +73,11 @@ export default function TranscriptEditModal({
       return;
     }
 
+    if (!user) {
+      setError('User not logged in');
+      return;
+    }
+
     try {
       setSubmitting(true);
       setError('');
@@ -107,7 +89,7 @@ export default function TranscriptEditModal({
       const cleanedText = cleanText(outputText);
 
       // Update processed script in Google Drive
-      await updateProcessedScript(videoId, cleanedText, token);
+      await updateProcessedScript(videoId, cleanedText, user.id, token);
 
       setSuccessMessage('✅ Script updated successfully!');
 
@@ -148,12 +130,7 @@ export default function TranscriptEditModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading transcript...</span>
-            </div>
-          ) : error && !rawTranscript ? (
+          {error && !rawTranscript ? (
             <div className="p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg">
               {error}
             </div>
@@ -166,7 +143,7 @@ export default function TranscriptEditModal({
                     Original Transcript (SupaData)
                   </label>
                   <span className="text-sm text-gray-500 dark:text-gray-400">
-                    Characters: {rawTranscript.length.toLocaleString()}
+                    Characters: {rawTranscript?.length.toLocaleString() || 0}
                   </span>
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg p-4 max-h-64 overflow-y-auto">
@@ -244,7 +221,7 @@ export default function TranscriptEditModal({
           </button>
           <button
             onClick={handleSubmit}
-            disabled={submitting || !outputText.trim() || loading}
+            disabled={submitting || !outputText.trim()}
             className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed font-medium transition-colors flex items-center gap-2"
           >
             {submitting ? (

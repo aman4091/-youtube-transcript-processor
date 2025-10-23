@@ -24,11 +24,21 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get user_id from request
+    const body = await req.json();
+    const user_id = body.user_id;
+
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
+    console.log(`👤 Generating schedule for user: ${user_id}`);
+
     // Fetch config first
     const { data: config, error: configError } = await supabase
       .from('schedule_config')
       .select('*')
-      .eq('user_id', 'default_user')
+      .eq('user_id', user_id)
       .single();
 
     if (configError || !config) {
@@ -56,10 +66,11 @@ serve(async (req) => {
 
     console.log(`📅 Checking dates: ${datesToGenerate.join(', ')}`);
 
-    // Check which dates already exist
+    // Check which dates already exist for this user
     const { data: existingSchedules } = await supabase
       .from('scheduled_videos')
       .select('schedule_date')
+      .eq('user_id', user_id)
       .in('schedule_date', datesToGenerate);
 
     const existingDates = new Set(
@@ -116,13 +127,13 @@ serve(async (req) => {
 
         // Select NEW videos (Day 6+)
         if (newPerChannel > 0) {
-          const newVideos = await selectVideos(supabase, 'new', channel.id, usedToday, date, newPerChannel);
+          const newVideos = await selectVideos(supabase, 'new', channel.id, usedToday, date, newPerChannel, user_id);
           channelVideos.push(...newVideos);
           usedToday.push(...newVideos.map((v: any) => v.video_id));
         }
 
         // Select OLD videos
-        const oldVideos = await selectVideos(supabase, 'old', channel.id, usedToday, date, oldPerChannel);
+        const oldVideos = await selectVideos(supabase, 'old', channel.id, usedToday, date, oldPerChannel, user_id);
         channelVideos.push(...oldVideos);
         usedToday.push(...oldVideos.map((v: any) => v.video_id));
 
@@ -141,13 +152,24 @@ serve(async (req) => {
             video_title: video.title,
             video_type: video.type,
             status: 'pending',
+            user_id: user_id,
           });
 
-          // Update usage tracker
+          // Update usage tracker (same user)
           await supabase.from('video_usage_tracker').insert({
             video_id: video.video_id,
             used_date: date,
             target_channel_id: channel.id,
+            target_channel_name: channel.name,
+            user_id: user_id,
+          });
+
+          // Track cross-user usage (for 10-day gap enforcement)
+          await supabase.from('cross_user_video_usage').insert({
+            video_id: video.video_id,
+            used_date: date,
+            user_id: user_id,
+            source_channel_id: video.source_channel_id || null,
             target_channel_name: channel.name,
           });
 
@@ -194,32 +216,44 @@ serve(async (req) => {
   }
 });
 
-// Helper: Select videos with uniqueness rules
-async function selectVideos(supabase: any, type: string, channelId: string, exclude: string[], date: string, count: number) {
+// Helper: Select videos with uniqueness rules + cross-user gap
+async function selectVideos(supabase: any, type: string, channelId: string, exclude: string[], date: string, count: number, user_id: string) {
   const table = type === 'new' ? 'video_pool_new' : 'video_pool_old';
 
-  // Get recent usage (15 days same channel, 10 days cross channel)
+  // Get recent usage by SAME user (15 days same channel, 10 days cross channel)
   const { data: recentSame } = await supabase
     .from('video_usage_tracker')
     .select('video_id')
+    .eq('user_id', user_id)
     .eq('target_channel_id', channelId)
     .gte('used_date', subtractDays(date, 15));
 
   const { data: recentCross } = await supabase
     .from('video_usage_tracker')
     .select('video_id')
+    .eq('user_id', user_id)
     .neq('target_channel_id', channelId)
+    .gte('used_date', subtractDays(date, 10));
+
+  // Get cross-user usage (10-day gap for OTHER users)
+  const { data: crossUserRecent } = await supabase
+    .from('cross_user_video_usage')
+    .select('video_id')
+    .neq('user_id', user_id)
     .gte('used_date', subtractDays(date, 10));
 
   const excludeAll = [
     ...exclude,
     ...(recentSame?.map((r: any) => r.video_id) || []),
     ...(recentCross?.map((r: any) => r.video_id) || []),
+    ...(crossUserRecent?.map((r: any) => r.video_id) || []),
   ];
 
+  // Filter by user_id for this user's video pool
   const { data: videos } = await supabase
     .from(table)
     .select('*')
+    .eq('user_id', user_id)
     .eq('status', 'active')
     .not('video_id', 'in', `(${excludeAll.length > 0 ? excludeAll.join(',') : 'NULL'})`)
     .order(type === 'old' ? 'view_count' : 'added_at', { ascending: false })

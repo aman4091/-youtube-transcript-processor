@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { syncQueue } from '../services/userDataSync';
 
 export interface QueuedScript {
   id: string;
@@ -20,7 +21,25 @@ interface TempQueueStore {
   getQueueCount: () => number;
   removeFromQueue: (id: string) => void;
   updateGeneratedTitle: (counter: number, title: string) => void;
+  syncToDatabase: (user_id: string) => Promise<void>;
 }
+
+// Helper to auto-sync to database
+const autoSyncQueue = (get: () => TempQueueStore) => {
+  const user_id = localStorage.getItem('user-storage');
+  if (user_id) {
+    try {
+      const userData = JSON.parse(user_id);
+      if (userData?.state?.user?.id) {
+        syncQueue(userData.state.user.id, get().queuedScripts).catch((err) =>
+          console.error('Queue sync error:', err)
+        );
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+};
 
 export const useTempQueueStore = create<TempQueueStore>()(
   persist(
@@ -44,6 +63,7 @@ export const useTempQueueStore = create<TempQueueStore>()(
           queuedScripts: [...state.queuedScripts, newScript],
         }));
         console.log(`✓ Queue updated. Total items: ${get().queuedScripts.length}`);
+        autoSyncQueue(get);
       },
 
       updateGeneratedTitle: (counter, title) => {
@@ -65,6 +85,7 @@ export const useTempQueueStore = create<TempQueueStore>()(
         console.log('🗑️ Clearing temp queue');
         set({ queuedScripts: [] });
         console.log('✓ Queue cleared');
+        autoSyncQueue(get);
       },
 
       getQueueCount: () => {
@@ -77,6 +98,11 @@ export const useTempQueueStore = create<TempQueueStore>()(
           queuedScripts: state.queuedScripts.filter((script) => script.id !== id),
         }));
         console.log(`✓ Item removed. Remaining: ${get().queuedScripts.length}`);
+        autoSyncQueue(get);
+      },
+
+      syncToDatabase: async (user_id: string) => {
+        await syncQueue(user_id, get().queuedScripts);
       },
     }),
     {

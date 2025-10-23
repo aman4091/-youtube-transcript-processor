@@ -25,29 +25,53 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get settings
-    const { data: config } = await supabase
-      .from('schedule_config')
+    // Get user_id from request
+    const body = await req.json().catch(() => ({}));
+    const user_id = body.user_id;
+
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
+    console.log(`👤 Refreshing old video pool for user: ${user_id}`);
+
+    // Get monitor settings (use source_channels from auto_monitor_settings)
+    const { data: monitorSettings } = await supabase
+      .from('auto_monitor_settings')
       .select('*')
-      .eq('user_id', 'default_user')
+      .eq('user_id', user_id)
       .single();
 
-    if (!config) {
-      throw new Error('Configuration not found');
+    if (!monitorSettings) {
+      throw new Error('Monitor settings not found');
     }
 
-    const sourceChannelUrl = config.source_channel_url;
-    const youtubeApiKey = config.youtube_api_key;
+    const sourceChannels = monitorSettings.source_channels || [];
+    const youtubeApiKey = monitorSettings.youtube_api_key;
 
-    if (!sourceChannelUrl || !youtubeApiKey) {
-      throw new Error('Source channel or YouTube API key not configured');
+    if (!sourceChannels || sourceChannels.length === 0) {
+      throw new Error('No source channels configured in settings');
     }
 
-    // Extract channel ID
-    const channelId = extractChannelId(sourceChannelUrl);
-    if (!channelId) {
-      throw new Error('Invalid source channel URL');
+    if (!youtubeApiKey) {
+      throw new Error('YouTube API key not configured');
     }
+
+    console.log(`📺 Processing ${sourceChannels.length} source channels...`);
+
+    let totalAdded = 0;
+    let totalUpdated = 0;
+
+    // Process each source channel
+    for (const channelUrl of sourceChannels) {
+      console.log(`\n🔍 Processing channel: ${channelUrl}`);
+
+      // Extract channel ID
+      const channelId = extractChannelId(channelUrl);
+      if (!channelId) {
+        console.log(`⚠️ Skipping invalid channel URL: ${channelUrl}`);
+        continue;
+      }
 
     // Get uploads playlist
     const channelResponse = await fetch(
@@ -135,40 +159,49 @@ serve(async (req) => {
     // Sort by view count (descending)
     videos.sort((a, b) => b.view_count - a.view_count);
 
-    // Update database
-    let added = 0;
-    let updated = 0;
+      // Update database for this channel
+      let added = 0;
+      let updated = 0;
 
-    for (const video of videos) {
-      // Check if exists
-      const { data: existing } = await supabase
-        .from('video_pool_old')
-        .select('id')
-        .eq('video_id', video.video_id)
-        .single();
-
-      if (existing) {
-        // Update view count
-        await supabase
+      for (const video of videos) {
+        // Check if exists for this user
+        const { data: existing } = await supabase
           .from('video_pool_old')
-          .update({ view_count: video.view_count })
-          .eq('video_id', video.video_id);
+          .select('id')
+          .eq('video_id', video.video_id)
+          .eq('user_id', user_id)
+          .single();
 
-        updated++;
-      } else {
-        // Insert new
-        await supabase.from('video_pool_old').insert({
-          video_id: video.video_id,
-          title: video.title,
-          duration: video.duration,
-          view_count: video.view_count,
-          published_at: video.published_at,
-          source_channel_id: channelId,
-          status: 'active',
-        });
+        if (existing) {
+          // Update view count
+          await supabase
+            .from('video_pool_old')
+            .update({ view_count: video.view_count })
+            .eq('video_id', video.video_id)
+            .eq('user_id', user_id);
 
-        added++;
+          updated++;
+        } else {
+          // Insert new
+          await supabase.from('video_pool_old').insert({
+            video_id: video.video_id,
+            title: video.title,
+            duration: video.duration,
+            view_count: video.view_count,
+            published_at: video.published_at,
+            source_channel_id: channelId,
+            status: 'active',
+            user_id: user_id,
+          });
+
+          added++;
+        }
       }
+
+      totalAdded += added;
+      totalUpdated += updated;
+
+      console.log(`  ✅ Channel complete: ${added} added, ${updated} updated`);
     }
 
     // Get total count
@@ -176,15 +209,16 @@ serve(async (req) => {
       .from('video_pool_old')
       .select('*', { count: 'exact', head: true });
 
-    console.log(`✅ Refresh complete: ${added} added, ${updated} updated, ${count} total`);
+    console.log(`\n✅ Refresh complete: ${totalAdded} added, ${totalUpdated} updated, ${count} total`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        added,
-        updated,
+        added: totalAdded,
+        updated: totalUpdated,
         total: count || 0,
-        message: `Refreshed old video pool`,
+        channels_processed: sourceChannels.length,
+        message: `Refreshed old video pool from ${sourceChannels.length} channels`,
       }),
       {
         status: 200,

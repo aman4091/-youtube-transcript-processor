@@ -11,7 +11,16 @@
       "Bash(git push)",
       "Bash(npm run build:*)",
       "Bash(node fix-7day-schedule.js:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm install:*)",
+      "Bash(supabase functions list:*)",
+      "Bash(curl:*)",
+      "Bash(sha256sum:*)",
+      "Bash(cat:*)",
+      "Bash(supabase db execute:*)",
+      "Bash(supabase db push:*)",
+      "Bash(supabase status:*)",
+      "Bash(supabase projects:*)"
     ],
     "deny": [],
     "ask": []

@@ -7,12 +7,14 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
  * Update processed script content in Google Drive
  * @param videoId - ID of the scheduled video
  * @param newContent - New script content to replace existing
+ * @param user_id - User ID for authorization
  * @param token - Supabase auth token
  * @returns Promise<void>
  */
 export async function updateProcessedScript(
   videoId: number,
   newContent: string,
+  user_id: string,
   token: string
 ): Promise<void> {
   const response = await fetch(
@@ -26,6 +28,7 @@ export async function updateProcessedScript(
       body: JSON.stringify({
         video_id: videoId,
         new_script_content: newContent,
+        user_id: user_id,
       }),
     }
   );

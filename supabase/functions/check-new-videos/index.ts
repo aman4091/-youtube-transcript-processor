@@ -52,12 +52,22 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Get user_id from request (optional)
+    const body = await req.json().catch(() => ({}));
+    const user_id = body.user_id;
+
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
+
+    console.log(`👤 Checking new videos for user: ${user_id}`);
+
     // Step 1: Fetch monitoring settings
     console.log('📥 Fetching monitoring settings...');
     const { data: settings, error: settingsError } = await supabase
       .from('auto_monitor_settings')
       .select('*')
-      .eq('user_id', 'default_user')
+      .eq('user_id', user_id)
       .single();
 
     if (settingsError || !settings) {
@@ -182,6 +192,7 @@ serve(async (req) => {
     const { data: poolVideos, error: poolError } = await supabase
       .from('video_pool_new')
       .select('video_id')
+      .eq('user_id', user_id)
       .in('video_id', videoIds);
 
     if (poolError) {
@@ -214,6 +225,7 @@ serve(async (req) => {
           source_channel_id: video.channelId,
           times_scheduled: 0,
           status: 'active',
+          user_id: user_id,
         };
       });
 
@@ -241,6 +253,7 @@ serve(async (req) => {
       error_details: channelErrors.length > 0 ? { errors: channelErrors } : null,
       duration_ms: duration,
       api_calls_made: monitorSettings.source_channels.length,
+      user_id: user_id,
     });
 
     console.log(`✅ Check completed in ${duration}ms`);

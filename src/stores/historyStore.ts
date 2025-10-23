@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { syncHistory } from '../services/userDataSync';
 
 export interface TargetChannelProcessing {
   targetChannelId: string;
@@ -42,7 +43,25 @@ interface HistoryStore {
   getProcessingsForVideo: (url: string) => TargetChannelProcessing[];
   getAllProcessedVideosForChannel: (targetChannelId: string) => ProcessedLink[];
   restoreHistory: (links: ProcessedLink[]) => void;
+  syncToDatabase: (user_id: string) => Promise<void>;
 }
+
+// Helper to auto-sync to database
+const autoSyncHistory = (get: () => HistoryStore) => {
+  const user_id = localStorage.getItem('user-storage');
+  if (user_id) {
+    try {
+      const userData = JSON.parse(user_id);
+      if (userData?.state?.user?.id) {
+        syncHistory(userData.state.user.id, get().processedLinks).catch((err) =>
+          console.error('History sync error:', err)
+        );
+      }
+    } catch (e) {
+      // Ignore
+    }
+  }
+};
 
 export const useHistoryStore = create<HistoryStore>()(
   persist(
@@ -80,6 +99,7 @@ export const useHistoryStore = create<HistoryStore>()(
                   : link
               ),
             }));
+            autoSyncHistory(get);
           }
         } else {
           // Video doesn't exist, create new entry
@@ -105,6 +125,7 @@ export const useHistoryStore = create<HistoryStore>()(
               ...state.processedLinks,
             ],
           }));
+          autoSyncHistory(get);
         }
       },
 
@@ -178,9 +199,16 @@ export const useHistoryStore = create<HistoryStore>()(
         );
       },
 
-      clearHistory: () => set({ processedLinks: [] }),
+      clearHistory: () => {
+        set({ processedLinks: [] });
+        autoSyncHistory(get);
+      },
 
       restoreHistory: (links) => set({ processedLinks: links }),
+
+      syncToDatabase: async (user_id: string) => {
+        await syncHistory(user_id, get().processedLinks);
+      },
     }),
     {
       name: 'youtube-processor-history',

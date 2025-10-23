@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import NavigationBar from './NavigationBar';
 import { supabase } from '../services/supabaseClient';
 import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useUserStore } from '../stores/userStore';
 
 interface DateSummary {
   date: string;
@@ -39,6 +40,7 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   onPushToChat,
 }) => {
   const { getQueueCount } = useTempQueueStore();
+  const { user } = useUserStore();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [schedules, setSchedules] = useState<Record<string, DateSummary>>({});
   const [loading, setLoading] = useState(false);
@@ -51,12 +53,19 @@ const ScheduleCalendar: React.FC<ScheduleCalendarProps> = ({
   const loadMonthSchedules = async () => {
     setLoading(true);
     try {
+      if (!user) {
+        alert('User not logged in');
+        setLoading(false);
+        return;
+      }
+
       const startDate = getMonthStart(currentMonth);
       const endDate = getMonthEnd(currentMonth);
 
       const { data, error } = await supabase
         .from('scheduled_videos')
         .select('*')
+        .eq('user_id', user.id)
         .gte('schedule_date', startDate)
         .lte('schedule_date', endDate);
 

@@ -15,6 +15,7 @@ import {
 import NavigationBar from './NavigationBar';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useUserStore } from '../stores/userStore';
 import {
   getMonitoringStats,
   getProcessedVideos,
@@ -60,6 +61,7 @@ export default function MonitoringDashboard({
 }: MonitoringDashboardProps) {
   const { settings, updateSettings } = useSettingsStore();
   const { getQueueCount } = useTempQueueStore();
+  const { user } = useUserStore();
 
   const [stats, setStats] = useState<MonitoringStats | null>(null);
   const [processedVideos, setProcessedVideos] = useState<ProcessedVideo[]>([]);
@@ -154,7 +156,13 @@ export default function MonitoringDashboard({
       setIsManualChecking(true);
       setError(null);
 
-      const result = await triggerManualCheck();
+      if (!user) {
+        setError('User not logged in');
+        setIsManualChecking(false);
+        return;
+      }
+
+      const result = await triggerManualCheck(user.id);
 
       setSuccessMessage(
         `Manual check complete! Found ${result.new_videos} new videos.`

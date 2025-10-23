@@ -25,21 +25,26 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get video IDs from request body
+    // Get video IDs and user_id from request body
     const body = await req.json();
     const videoIds = body.video_ids;
+    const user_id = body.user_id;
 
     if (!videoIds || !Array.isArray(videoIds) || videoIds.length === 0) {
       throw new Error('video_ids array is required');
     }
 
-    console.log(`📹 Pushing ${videoIds.length} selected videos`);
+    if (!user_id) {
+      throw new Error('user_id is required');
+    }
 
-    // Get settings
+    console.log(`📹 Pushing ${videoIds.length} selected videos for user ${user_id}`);
+
+    // Get settings for this user
     const { data: config } = await supabase
       .from('schedule_config')
       .select('*')
-      .eq('user_id', 'default_user')
+      .eq('user_id', user_id)
       .single();
 
     if (!config) {
@@ -53,11 +58,12 @@ serve(async (req) => {
       throw new Error('Telegram credentials not configured');
     }
 
-    // Fetch selected videos by IDs
+    // Fetch selected videos by IDs (filter by user_id for security)
     const { data: videos, error } = await supabase
       .from('scheduled_videos')
       .select('*')
       .in('id', videoIds)
+      .eq('user_id', user_id)
       .eq('status', 'ready')
       .order('target_channel_name', { ascending: true })
       .order('slot_number', { ascending: true });
@@ -156,8 +162,18 @@ async function sendVideoToTelegram(
     // Generate filename: YYYY-MM-DD_ChannelName_VideoN.txt
     const filename = `${video.schedule_date}_${sanitizeFilename(video.target_channel_name)}_Video${video.slot_number}.txt`;
 
-    // Content (placeholder - will be replaced with Google Drive content)
-    const content = `Video: ${video.video_title}\nVideo ID: ${video.video_id}\nChannel: ${video.target_channel_name}\nSlot: ${video.slot_number}\nType: ${video.video_type}\n\n[Script content will be added by Google Drive integration]`;
+    // Get content from database
+    let content: string;
+
+    if (video.processed_script && video.processed_script.trim()) {
+      // Use processed script from database
+      content = video.processed_script;
+      console.log(`✅ Using processed script from database (${content.length} characters)`);
+    } else {
+      // Fallback
+      content = `Video: ${video.video_title}\nVideo ID: ${video.video_id}\nChannel: ${video.target_channel_name}\nSlot: ${video.slot_number}\nType: ${video.video_type}\n\n[No processed script available]`;
+      console.log(`⚠️ No processed script found in database for video ${video.id}`);
+    }
 
     // Create file blob
     const fileBlob = new Blob([content], { type: 'text/plain' });
