@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { LogIn, Loader2 } from 'lucide-react';
 import { useUserStore } from '../stores/userStore';
+import { useSettingsStore } from '../stores/settingsStore';
+import { useHistoryStore } from '../stores/historyStore';
+import { useTempQueueStore } from '../stores/tempQueueStore';
+import { useScriptCounterStore } from '../stores/scriptCounterStore';
+import { loadUserData } from '../services/userDataSync';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -9,6 +14,12 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 export default function Login() {
   const navigate = useNavigate();
   const login = useUserStore((state) => state.login);
+
+  // Get store setters for loading data
+  const { updateSettings } = useSettingsStore();
+  const { restoreHistory } = useHistoryStore();
+  const { clearQueue, addToQueue } = useTempQueueStore();
+  const { setCounter } = useScriptCounterStore();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -38,6 +49,48 @@ export default function Login() {
 
       // Save user to store
       login(data.user);
+
+      // Load user data from database
+      console.log('📥 Loading user data from database...');
+      const userData = await loadUserData(data.user.id);
+
+      if (userData.success && userData.data) {
+        // Load settings
+        if (userData.data.settings) {
+          console.log('✓ Loading settings from database');
+          updateSettings(userData.data.settings);
+        }
+
+        // Load history
+        if (userData.data.history && userData.data.history.length > 0) {
+          console.log(`✓ Loading ${userData.data.history.length} history items`);
+          restoreHistory(userData.data.history);
+        }
+
+        // Load queue
+        if (userData.data.queue && userData.data.queue.length > 0) {
+          console.log(`✓ Loading ${userData.data.queue.length} queue items`);
+          clearQueue();
+          userData.data.queue.forEach((item: any) => {
+            addToQueue(
+              item.content,
+              item.modelName,
+              item.counter,
+              item.videoTitle,
+              item.videoUrl,
+              item.generatedTitle
+            );
+          });
+        }
+
+        // Load counter
+        if (userData.data.counter) {
+          console.log(`✓ Loading counter: ${userData.data.counter}`);
+          setCounter(userData.data.counter);
+        }
+
+        console.log('✅ All user data loaded successfully!');
+      }
 
       // Redirect to home
       navigate('/');

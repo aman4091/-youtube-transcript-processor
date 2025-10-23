@@ -176,47 +176,46 @@ export async function syncCounter(user_id: string, counter: number, client_times
 
 /**
  * Load all user data from database on login
+ * Uses export-backup to get all data efficiently
  */
 export async function loadUserData(user_id: string) {
   try {
-    const [settings, history, queue, counter] = await Promise.all([
-      loadSettings(user_id),
-      loadHistory(user_id),
-      loadQueue(user_id),
-      loadCounter(user_id),
-    ]);
+    console.log('🔄 Loading user data from database...');
+
+    // Use export backup to fetch all data at once
+    const result = await exportBackup(user_id);
+
+    if (!result.success || !result.data) {
+      console.log('⚠️ No data found in database, using defaults');
+      return {
+        success: true,
+        data: {
+          settings: null,
+          history: [],
+          queue: [],
+          counter: 0,
+        },
+      };
+    }
+
+    console.log('✓ User data loaded successfully');
+
+    // Extract data from backup format
+    const backupData = result.data.data;
 
     return {
       success: true,
       data: {
-        settings,
-        history,
-        queue,
-        counter,
+        settings: backupData.settings || null,
+        history: backupData.history || [],
+        queue: backupData.queue || [],
+        counter: backupData.counter || 0,
       },
     };
   } catch (error: any) {
     console.error('Load user data error:', error);
     return { success: false, error: error.message };
   }
-}
-
-async function loadSettings(_user_id: string) {
-  // Implementation will call Supabase directly or via sync function
-  // For now, return null (will be implemented when integrating stores)
-  return null;
-}
-
-async function loadHistory(_user_id: string) {
-  return [];
-}
-
-async function loadQueue(_user_id: string) {
-  return [];
-}
-
-async function loadCounter(_user_id: string) {
-  return 0;
 }
 
 // ============================================
