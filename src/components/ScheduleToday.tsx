@@ -221,12 +221,17 @@ export default function ScheduleToday({
     setSuccessMessage(null);
 
     try {
+      // Get auth token
+      const { data: supabaseData } = await supabase.auth.getSession();
+      const token = supabaseData.session?.access_token;
+
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-schedule`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           },
           body: JSON.stringify({ user_id: user.id }),
         }
