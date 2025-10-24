@@ -204,6 +204,50 @@ export default function ScheduleToday({
     }
   };
 
+  const [resetting, setResetting] = useState(false);
+
+  const handleResetSchedule = async () => {
+    if (!user) {
+      setError('User not logged in');
+      return;
+    }
+
+    if (!confirm('⚠️ This will DELETE all your scheduled videos and generate a fresh 7-day schedule. Continue?')) {
+      return;
+    }
+
+    setResetting(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/reset-schedule`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ user_id: user.id }),
+        }
+      );
+
+      const result = await response.json();
+
+      if (result.success) {
+        setSuccessMessage(`✅ Reset complete! Deleted ${result.deleted} old videos, generated fresh schedule.`);
+        loadSchedule(); // Reload the current view
+      } else {
+        throw new Error(result.error || 'Reset failed');
+      }
+    } catch (err: any) {
+      console.error('Error resetting schedule:', err);
+      setError(err.message || 'Failed to reset schedule');
+    } finally {
+      setResetting(false);
+    }
+  };
+
   const groupByChannel = (videos: ScheduledVideo[]) => {
     const grouped: Record<string, ScheduledVideo[]> = {};
     videos.forEach((video) => {
@@ -331,6 +375,24 @@ export default function ScheduleToday({
                 <>
                   <History className="w-5 h-5" />
                   Sync to History ({stats.published} published)
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleResetSchedule}
+              disabled={resetting}
+              className="px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              {resetting ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Resetting...
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="w-5 h-5" />
+                  Reset Schedule
                 </>
               )}
             </button>
