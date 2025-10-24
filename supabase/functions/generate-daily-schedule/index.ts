@@ -185,7 +185,7 @@ serve(async (req) => {
     await supabase
       .from('schedule_config')
       .update({ last_schedule_generated_date: lastGeneratedDate })
-      .eq('user_id', 'default_user');
+      .eq('user_id', user_id);
 
     console.log(`\n✅ Schedule generation complete!`);
     console.log(`   Dates generated: ${missingDates.length}`);
