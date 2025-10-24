@@ -128,16 +128,24 @@ function AppContent() {
     setResults(null);
 
     try {
-      // Validate API keys
-      if (!settings.supaDataApiKey) {
-        console.error('❌ SupaData API key not configured');
+      // Validate API keys - use array format now
+      if (!settings.supaDataApiKeys || settings.supaDataApiKeys.length === 0) {
+        console.error('❌ SupaData API keys not configured');
+        setProcessingState({ isProcessing: false, status: '' });
+        return;
+      }
+
+      // Get first available key
+      const supaDataKey = settings.supaDataApiKeys[0].key;
+      if (!supaDataKey) {
+        console.error('❌ No valid SupaData API key found');
         setProcessingState({ isProcessing: false, status: '' });
         return;
       }
 
       // Fetch transcript
       console.log('📝 Fetching transcript from SupaData API...');
-      const transcriptData = await fetchYouTubeTranscript(url, settings.supaDataApiKey);
+      const transcriptData = await fetchYouTubeTranscript(url, supaDataKey);
       const transcript = transcriptData.transcript;
       console.log(`✓ Transcript fetched: ${transcript.length} characters`);
 

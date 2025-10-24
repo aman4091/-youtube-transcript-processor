@@ -50,8 +50,14 @@ export default function ShortsFinder({
     console.log('🎬 Starting shorts analysis for:', videoTitle);
 
     // Validate API keys
-    if (!settings.supaDataApiKey) {
-      setError('SupaData API key not configured. Please add it in Settings.');
+    if (!settings.supaDataApiKeys || settings.supaDataApiKeys.length === 0) {
+      setError('SupaData API keys not configured. Please add them in Settings.');
+      return;
+    }
+
+    const supaDataKey = settings.supaDataApiKeys[0]?.key;
+    if (!supaDataKey) {
+      setError('No valid SupaData API key found.');
       return;
     }
 
@@ -85,7 +91,7 @@ export default function ShortsFinder({
       setProcessingStep('Fetching video transcript...');
       console.log('📝 Fetching transcript from SupaData...');
 
-      const transcriptResponse = await fetchYouTubeTranscript(videoUrl, settings.supaDataApiKey);
+      const transcriptResponse = await fetchYouTubeTranscript(videoUrl, supaDataKey);
 
       if (transcriptResponse.error) {
         throw new Error(transcriptResponse.error);

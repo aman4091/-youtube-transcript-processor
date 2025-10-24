@@ -192,7 +192,7 @@ export default function MonitoringDashboard({
         source_channels: settings.channelUrls,
         ai_model: settings.monitoringAIModel,
         custom_prompt: settings.customPrompt,
-        supabase_api_key: settings.supaDataApiKey,
+        supabase_api_key: settings.supaDataApiKeys?.[0]?.key || '',
         deepseek_api_key: settings.deepSeekApiKey,
         gemini_api_key: settings.geminiApiKey,
         openrouter_api_key: settings.openRouterApiKey,
