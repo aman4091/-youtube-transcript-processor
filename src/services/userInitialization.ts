@@ -79,9 +79,12 @@ export async function syncUserVideoPools(userId: string, channelUrls: string[]):
     });
 
     if (!refreshOldResponse.ok) {
-      console.warn('⚠️ Failed to refresh old videos pool');
+      const errorText = await refreshOldResponse.text();
+      console.warn('⚠️ Failed to refresh old videos pool:', errorText);
     } else {
-      console.log('✓ Old videos pool refreshed');
+      const refreshResult = await refreshOldResponse.json();
+      console.log('✓ Old videos pool refreshed:', refreshResult);
+      console.log(`  📊 Added: ${refreshResult.added || 0}, Total: ${refreshResult.total || 0}`);
     }
 
     console.log('✅ Video pools synced!');
@@ -178,13 +181,14 @@ export async function completeUserSetup(
       console.log('✓ User channels updated successfully');
     }
 
-    // Step 4: Sync video pools
-    await syncUserVideoPools(userId, channelUrls);
+    // Step 4: Sync video pools (this awaits the Edge Functions, so pools should be populated)
+    const syncResult = await syncUserVideoPools(userId, channelUrls);
 
-    // Step 5: Wait a bit for pools to populate
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    if (!syncResult.success) {
+      console.warn('⚠️ Video pool sync had issues, but continuing...');
+    }
 
-    // Step 6: Generate schedule
+    // Step 5: Generate schedule (no extra wait needed since we await sync above)
     await autoGenerateSchedule(userId);
 
     console.log('🎉 Complete user setup finished!');
