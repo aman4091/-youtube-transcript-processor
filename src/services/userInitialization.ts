@@ -1,62 +1,36 @@
 // User Initialization Service
 // Automatically sets up new users with required database entries
 
-import { supabase } from './supabaseClient';
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 /**
  * Initialize new user with all required database entries
  * Called automatically on first login
+ * Uses Edge Function to bypass RLS policies
  */
 export async function initializeNewUser(userId: string): Promise<{ success: boolean; error?: string }> {
   try {
     console.log(`🔧 Initializing user: ${userId}`);
 
-    // 1. Create schedule_config entry
-    const { error: configError } = await supabase
-      .from('schedule_config')
-      .upsert({
-        user_id: userId,
-        source_channel_id: '',
-        source_channel_name: '',
-        source_channel_url: '',
-        target_channels: [],
-        videos_per_channel: 4, // 3 old + 1 new
-        system_status: 'active',
-      }, {
-        onConflict: 'user_id'
-      });
+    // Call Edge Function to create records with service_role_key (bypasses RLS)
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/initialize-user`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId }),
+    });
 
-    if (configError && !configError.message.includes('duplicate')) {
-      console.error('❌ Failed to create schedule_config:', configError);
-    } else {
-      console.log('✓ Schedule config initialized');
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Initialization failed: ${error}`);
     }
 
-    // 2. Create auto_monitor_settings entry (if table exists)
-    try {
-      const { error: monitorError } = await supabase
-        .from('auto_monitor_settings')
-        .upsert({
-          user_id: userId,
-          enabled: false,
-          check_interval_hours: 2,
-        }, {
-          onConflict: 'user_id'
-        });
+    const result = await response.json();
+    console.log('✅ User initialization complete!', result);
 
-      if (monitorError && !monitorError.message.includes('duplicate')) {
-        console.warn('⚠️ Auto-monitor settings not created:', monitorError.message);
-      } else {
-        console.log('✓ Auto-monitor settings initialized');
-      }
-    } catch (e) {
-      console.warn('⚠️ Auto-monitor table may not exist');
-    }
-
-    console.log('✅ User initialization complete!');
     return { success: true };
 
   } catch (error: any) {
