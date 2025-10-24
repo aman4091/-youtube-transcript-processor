@@ -64,7 +64,66 @@ async function pollJobResult(jobId: string, apiKey: string): Promise<string> {
 }
 
 /**
- * Fetch YouTube transcript using SupaData API
+ * Fetch YouTube transcript with automatic key rotation
+ * Tries multiple API keys if rate limit is hit
+ */
+export async function fetchYouTubeTranscriptWithRotation(
+  youtubeUrl: string,
+  apiKeys: Array<{ key: string; label?: string }>
+): Promise<TranscriptResponse> {
+  if (!apiKeys || apiKeys.length === 0) {
+    throw new Error('No SupaData API keys provided');
+  }
+
+  let lastError: Error | null = null;
+
+  // Try each key in order
+  for (let i = 0; i < apiKeys.length; i++) {
+    const apiKeyObj = apiKeys[i];
+    const apiKey = apiKeyObj.key;
+
+    if (!apiKey) {
+      console.warn(`[SupaData] Skipping invalid key at index ${i}`);
+      continue;
+    }
+
+    try {
+      console.log(`[SupaData] Trying key ${i + 1}/${apiKeys.length}: ${apiKeyObj.label || 'Unlabeled'}`);
+
+      const result = await fetchYouTubeTranscript(youtubeUrl, apiKey);
+
+      console.log(`✅ [SupaData] Success with key ${i + 1}/${apiKeys.length}`);
+      return result;
+
+    } catch (error: any) {
+      lastError = error;
+
+      // If rate limit (429), try next key
+      if (error.message?.includes('rate limit')) {
+        console.warn(`⚠️ [SupaData] Key ${i + 1} rate limited, trying next key...`);
+        continue;
+      }
+
+      // If other error (401, 403, etc.), don't try more keys
+      if (error.message?.includes('invalid') || error.message?.includes('forbidden')) {
+        console.error(`❌ [SupaData] Key ${i + 1} authentication failed`);
+        throw error;
+      }
+
+      // Server errors or other issues - try next key
+      console.warn(`⚠️ [SupaData] Key ${i + 1} failed: ${error.message}, trying next...`);
+      continue;
+    }
+  }
+
+  // All keys failed
+  throw new Error(
+    `All ${apiKeys.length} SupaData API keys failed. Last error: ${lastError?.message || 'Unknown error'}`
+  );
+}
+
+/**
+ * Fetch YouTube transcript using SupaData API (single key)
  */
 export async function fetchYouTubeTranscript(
   youtubeUrl: string,

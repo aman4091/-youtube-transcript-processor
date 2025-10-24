@@ -4,7 +4,7 @@ import VideoGrid from './VideoGrid';
 import ShortsResults from './ShortsResults';
 import NavigationBar from './NavigationBar';
 import { YouTubeVideo } from '../services/youtubeAPI';
-import { fetchYouTubeTranscript } from '../services/supaDataAPI';
+import { fetchYouTubeTranscriptWithRotation } from '../services/supaDataAPI';
 import { analyzeShortsFromTranscript } from '../services/shortsAnalyzer';
 import { ShortSegment } from '../types/shorts';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -55,12 +55,6 @@ export default function ShortsFinder({
       return;
     }
 
-    const supaDataKey = settings.supaDataApiKeys[0]?.key;
-    if (!supaDataKey) {
-      setError('No valid SupaData API key found.');
-      return;
-    }
-
     if (!settings.openRouterApiKey) {
       setError('OpenRouter API key not configured. Please add it in Settings.');
       return;
@@ -87,11 +81,11 @@ export default function ShortsFinder({
     setCurrentView('processing');
 
     try {
-      // Step 1: Fetch transcript
+      // Step 1: Fetch transcript with rotation
       setProcessingStep('Fetching video transcript...');
-      console.log('📝 Fetching transcript from SupaData...');
+      console.log('📝 Fetching transcript from SupaData with key rotation...');
 
-      const transcriptResponse = await fetchYouTubeTranscript(videoUrl, supaDataKey);
+      const transcriptResponse = await fetchYouTubeTranscriptWithRotation(videoUrl, settings.supaDataApiKeys);
 
       if (transcriptResponse.error) {
         throw new Error(transcriptResponse.error);

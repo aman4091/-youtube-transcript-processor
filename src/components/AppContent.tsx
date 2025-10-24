@@ -18,7 +18,7 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
-import { fetchYouTubeTranscript } from '../services/supaDataAPI';
+import { fetchYouTubeTranscriptWithRotation } from '../services/supaDataAPI';
 import { fetchMultipleChannelsVideos, YouTubeVideo } from '../services/youtubeAPI';
 import {
   processWithDeepSeek,
@@ -135,17 +135,9 @@ function AppContent() {
         return;
       }
 
-      // Get first available key
-      const supaDataKey = settings.supaDataApiKeys[0].key;
-      if (!supaDataKey) {
-        console.error('❌ No valid SupaData API key found');
-        setProcessingState({ isProcessing: false, status: '' });
-        return;
-      }
-
-      // Fetch transcript
-      console.log('📝 Fetching transcript from SupaData API...');
-      const transcriptData = await fetchYouTubeTranscript(url, supaDataKey);
+      // Fetch transcript with automatic key rotation
+      console.log('📝 Fetching transcript from SupaData API with key rotation...');
+      const transcriptData = await fetchYouTubeTranscriptWithRotation(url, settings.supaDataApiKeys);
       const transcript = transcriptData.transcript;
       console.log(`✓ Transcript fetched: ${transcript.length} characters`);
 
