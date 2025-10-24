@@ -154,13 +154,33 @@ export async function completeUserSetup(
       return { success: true };
     }
 
-    // Step 3: Sync video pools
+    // Step 3: Update schedule_config with target channels
+    console.log('📝 Updating schedule config with target channels...');
+    const updateResponse = await fetch(`${SUPABASE_URL}/functions/v1/update-schedule-config`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        target_channels: targetChannels,
+      }),
+    });
+
+    if (!updateResponse.ok) {
+      console.warn('⚠️ Failed to update schedule config');
+    } else {
+      console.log('✓ Schedule config updated with target channels');
+    }
+
+    // Step 4: Sync video pools
     await syncUserVideoPools(userId, channelUrls);
 
-    // Step 4: Wait a bit for pools to populate
+    // Step 5: Wait a bit for pools to populate
     await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Step 5: Generate schedule
+    // Step 6: Generate schedule
     await autoGenerateSchedule(userId);
 
     console.log('🎉 Complete user setup finished!');
