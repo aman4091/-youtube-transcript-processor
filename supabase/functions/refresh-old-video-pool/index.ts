@@ -182,6 +182,7 @@ serve(async (req) => {
               user_id: user_id,  // Set/update user_id to claim this video
               source_channel_id: channelId,
               source_channel_name: channelName,
+              status: 'active',  // CRITICAL: Set status to active for schedule queries
               updated_at: new Date().toISOString(),
             })
             .eq('video_id', video.video_id);
