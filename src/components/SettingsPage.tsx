@@ -99,7 +99,8 @@ export default function SettingsPage({
         const result = await completeUserSetup(
           user.id,
           urls,
-          localSettings.targetChannels
+          localSettings.targetChannels,
+          localSettings.youtubeApiKey
         );
 
         if (result.success) {

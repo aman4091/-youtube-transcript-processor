@@ -129,13 +129,15 @@ export async function autoGenerateSchedule(userId: string): Promise<{ success: b
 /**
  * Complete setup for new user
  * 1. Initialize database entries
- * 2. Sync video pools
- * 3. Generate schedule
+ * 2. Update settings with channels
+ * 3. Sync video pools
+ * 4. Generate schedule
  */
 export async function completeUserSetup(
   userId: string,
   channelUrls: string[],
-  targetChannels: any[]
+  targetChannels: any[],
+  youtubeApiKey?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     console.log('🚀 Starting complete user setup...');
@@ -154,9 +156,9 @@ export async function completeUserSetup(
       return { success: true };
     }
 
-    // Step 3: Update schedule_config with target channels
-    console.log('📝 Updating schedule config with target channels...');
-    const updateResponse = await fetch(`${SUPABASE_URL}/functions/v1/update-schedule-config`, {
+    // Step 3: Update both schedule_config AND auto_monitor_settings
+    console.log('📝 Updating database with channels...');
+    const updateResponse = await fetch(`${SUPABASE_URL}/functions/v1/update-user-channels`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
@@ -164,14 +166,16 @@ export async function completeUserSetup(
       },
       body: JSON.stringify({
         user_id: userId,
+        source_channels: channelUrls,
         target_channels: targetChannels,
+        youtube_api_key: youtubeApiKey || '',
       }),
     });
 
     if (!updateResponse.ok) {
-      console.warn('⚠️ Failed to update schedule config');
+      console.warn('⚠️ Failed to update user channels');
     } else {
-      console.log('✓ Schedule config updated with target channels');
+      console.log('✓ User channels updated successfully');
     }
 
     // Step 4: Sync video pools
