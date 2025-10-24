@@ -19,9 +19,12 @@ export async function initializeNewUser(userId: string): Promise<{ success: bool
       .from('schedule_config')
       .upsert({
         user_id: userId,
+        source_channel_id: '',
+        source_channel_name: '',
+        source_channel_url: '',
+        target_channels: [],
         videos_per_channel: 4, // 3 old + 1 new
-        new_videos_per_day: 1,
-        last_schedule_generated_date: null,
+        system_status: 'active',
       }, {
         onConflict: 'user_id'
       });
@@ -40,7 +43,6 @@ export async function initializeNewUser(userId: string): Promise<{ success: bool
           user_id: userId,
           enabled: false,
           check_interval_hours: 2,
-          last_check: null,
         }, {
           onConflict: 'user_id'
         });
