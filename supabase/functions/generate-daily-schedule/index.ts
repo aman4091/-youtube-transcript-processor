@@ -127,13 +127,19 @@ serve(async (req) => {
 
         // Select NEW videos (Day 6+)
         if (newPerChannel > 0) {
-          const newVideos = await selectVideos(supabase, 'new', channel.id, usedToday, date, newPerChannel, user_id);
-          channelVideos.push(...newVideos);
-          usedToday.push(...newVideos.map((v: any) => v.video_id));
+          try {
+            const newVideos = await selectVideos(supabase, 'new', channel.id, usedToday, date, newPerChannel, user_id);
+            channelVideos.push(...newVideos);
+            usedToday.push(...newVideos.map((v: any) => v.video_id));
+          } catch (error: any) {
+            console.warn(`⚠️ Could not get new videos for ${channel.name}, using old videos only:`, error.message);
+            // Continue with old videos only
+          }
         }
 
-        // Select OLD videos
-        const oldVideos = await selectVideos(supabase, 'old', channel.id, usedToday, date, oldPerChannel, user_id);
+        // Select OLD videos (get more if new videos failed)
+        const oldNeeded = 4 - channelVideos.length; // Fill up to 4 total videos
+        const oldVideos = await selectVideos(supabase, 'old', channel.id, usedToday, date, oldNeeded, user_id);
         channelVideos.push(...oldVideos);
         usedToday.push(...oldVideos.map((v: any) => v.video_id));
 
