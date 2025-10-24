@@ -321,6 +321,11 @@ export default function SettingsPage({
   };
 
   const syncKeysToSupabase = async () => {
+    if (!user) {
+      setKeySyncMessage({ type: 'error', text: '❌ User not logged in' });
+      return;
+    }
+
     setIsSyncingKeys(true);
     setKeySyncMessage(null);
 
@@ -344,7 +349,7 @@ export default function SettingsPage({
             added_at: k.added_at || new Date().toISOString(),
           })),
         })
-        .eq('user_id', 'default_user');
+        .eq('user_id', user.id);
 
       if (error) throw error;
 
@@ -370,12 +375,17 @@ export default function SettingsPage({
   };
 
   const loadKeysFromSupabase = async () => {
+    if (!user) {
+      setKeySyncMessage({ type: 'error', text: '❌ User not logged in' });
+      return;
+    }
+
     setIsSyncingKeys(true);
     try {
       const { data, error } = await supabase
         .from('auto_monitor_settings')
         .select('supadata_keys')
-        .eq('user_id', 'default_user')
+        .eq('user_id', user.id)
         .single();
 
       if (error) throw error;
