@@ -6,6 +6,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 // Types
 interface SyncSettingsRequest {
+  user_id: string;
   enabled: boolean;
   check_interval_hours: number;
   source_channels: string[];
@@ -51,6 +52,19 @@ serve(async (req) => {
     const settings: SyncSettingsRequest = await req.json();
 
     // Validate required fields
+    if (!settings.user_id) {
+      return new Response(
+        JSON.stringify({ error: 'user_id is required' }),
+        {
+          status: 400,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          },
+        }
+      );
+    }
+
     if (!settings.youtube_api_key) {
       return new Response(
         JSON.stringify({ error: 'YouTube API key is required' }),
@@ -131,7 +145,7 @@ serve(async (req) => {
 
     // Prepare settings object for database
     const dbSettings = {
-      user_id: 'default_user',
+      user_id: settings.user_id,
       enabled: settings.enabled,
       check_interval_hours: settings.check_interval_hours || 2,
       source_channels: settings.source_channels || [],

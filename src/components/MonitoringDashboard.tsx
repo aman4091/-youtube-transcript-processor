@@ -182,11 +182,17 @@ export default function MonitoringDashboard({
   };
 
   const handleSyncSettings = async () => {
+    if (!user) {
+      setError('User not logged in');
+      return;
+    }
+
     try {
       setError(null);
 
       // Prepare auto-monitor settings
       const autoMonitorSettings = {
+        user_id: user.id,  // Add user_id for multi-user support
         enabled: settings.autoMonitoringEnabled,
         check_interval_hours: settings.monitoringIntervalHours,
         source_channels: settings.channelUrls,
