@@ -73,9 +73,9 @@ serve(async (req) => {
         continue;
       }
 
-    // Get uploads playlist
+    // Get uploads playlist and channel name
     const channelResponse = await fetch(
-      `https://www.googleapis.com/youtube/v3/channels?part=contentDetails&id=${channelId}&key=${youtubeApiKey}`
+      `https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&id=${channelId}&key=${youtubeApiKey}`
     );
 
     if (!channelResponse.ok) {
@@ -85,12 +85,14 @@ serve(async (req) => {
     const channelData = await channelResponse.json();
     const uploadsPlaylistId =
       channelData.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    const channelName = channelData.items?.[0]?.snippet?.title || 'Unknown Channel';
 
     if (!uploadsPlaylistId) {
       throw new Error('Uploads playlist not found');
     }
 
-    console.log(`📺 Found uploads playlist: ${uploadsPlaylistId}`);
+    console.log(`📺 Channel: ${channelName}`);
+    console.log(`📺 Uploads playlist: ${uploadsPlaylistId}`);
 
     // Fetch videos from playlist (max 200)
     const videoIds: string[] = [];
@@ -183,18 +185,23 @@ serve(async (req) => {
           updated++;
         } else {
           // Insert new
-          await supabase.from('video_pool_old').insert({
+          const { error: insertError } = await supabase.from('video_pool_old').insert({
             video_id: video.video_id,
             title: video.title,
             duration: video.duration,
             view_count: video.view_count,
             published_at: video.published_at,
             source_channel_id: channelId,
+            source_channel_name: channelName,
             status: 'active',
             user_id: user_id,
           });
 
-          added++;
+          if (insertError) {
+            console.error(`❌ Failed to insert video ${video.video_id}:`, insertError);
+          } else {
+            added++;
+          }
         }
       }
 
