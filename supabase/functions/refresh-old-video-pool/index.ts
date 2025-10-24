@@ -166,25 +166,33 @@ serve(async (req) => {
       let updated = 0;
 
       for (const video of videos) {
-        // Check if exists for this user
+        // Check if video exists (regardless of user_id - we'll claim it for this user)
         const { data: existing } = await supabase
           .from('video_pool_old')
-          .select('id')
+          .select('id, user_id')
           .eq('video_id', video.video_id)
-          .eq('user_id', user_id)
-          .single();
+          .maybeSingle();
 
         if (existing) {
-          // Update view count
-          await supabase
+          // Update existing video and claim it for this user (fixes NULL user_id videos)
+          const { error: updateError } = await supabase
             .from('video_pool_old')
-            .update({ view_count: video.view_count })
-            .eq('video_id', video.video_id)
-            .eq('user_id', user_id);
+            .update({
+              view_count: video.view_count,
+              user_id: user_id,  // Set/update user_id to claim this video
+              source_channel_id: channelId,
+              source_channel_name: channelName,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('video_id', video.video_id);
 
-          updated++;
+          if (updateError) {
+            console.error(`❌ Failed to update video ${video.video_id}:`, updateError);
+          } else {
+            updated++;
+          }
         } else {
-          // Insert new
+          // Insert new video
           const { error: insertError } = await supabase.from('video_pool_old').insert({
             video_id: video.video_id,
             title: video.title,
@@ -211,12 +219,13 @@ serve(async (req) => {
       console.log(`  ✅ Channel complete: ${added} added, ${updated} updated`);
     }
 
-    // Get total count
+    // Get total count for THIS user
     const { count } = await supabase
       .from('video_pool_old')
-      .select('*', { count: 'exact', head: true });
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user_id);
 
-    console.log(`\n✅ Refresh complete: ${totalAdded} added, ${totalUpdated} updated, ${count} total`);
+    console.log(`\n✅ Refresh complete: ${totalAdded} added, ${totalUpdated} updated (claimed for user), ${count} total for this user`);
 
     return new Response(
       JSON.stringify({
