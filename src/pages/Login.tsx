@@ -7,6 +7,7 @@ import { useHistoryStore } from '../stores/historyStore';
 import { useTempQueueStore } from '../stores/tempQueueStore';
 import { useScriptCounterStore } from '../stores/scriptCounterStore';
 import { loadUserData } from '../services/userDataSync';
+import { initializeNewUser } from '../services/userInitialization';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -143,6 +144,10 @@ export default function Login() {
 
         console.log('✅ All user data loaded successfully!');
       }
+
+      // Auto-initialize new user (creates required database entries)
+      console.log('🔧 Running auto-initialization...');
+      await initializeNewUser(data.user.id);
 
       // Redirect to home
       navigate('/');

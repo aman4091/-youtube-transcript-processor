@@ -7,6 +7,8 @@ import { fetchOpenRouterModels } from '../services/aiProcessors';
 import { verifyTelegramCredentials, sendCommand } from '../services/telegramAPI';
 import { supabase } from '../services/supabaseClient';
 import BackupRestoreSection from './BackupRestoreSection';
+import { completeUserSetup } from '../services/userInitialization';
+import { useUserStore } from '../stores/userStore';
 
 interface SettingsPageProps {
   onClose: () => void;
@@ -35,6 +37,7 @@ export default function SettingsPage({
 }: SettingsPageProps) {
   const { settings, updateSettings } = useSettingsStore();
   const { queuedScripts } = useTempQueueStore();
+  const { user } = useUserStore();
 
   const [localSettings, setLocalSettings] = useState(settings);
   const [openRouterModels, setOpenRouterModels] = useState<Array<{ id: string; name: string }>>([]);
@@ -42,6 +45,10 @@ export default function SettingsPage({
   const [channelUrlsText, setChannelUrlsText] = useState('');
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Auto-setup states
+  const [isSettingUp, setIsSettingUp] = useState(false);
+  const [setupMessage, setSetupMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
   // Video and FFmpeg states
   const [videoEnabled, setVideoEnabled] = useState(false);
@@ -71,15 +78,64 @@ export default function SettingsPage({
     fetchOpenRouterModels().then(setOpenRouterModels);
   }, []);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Parse channel URLs one final time before saving
     const urls = channelUrlsText
       .split('\n')
       .map(url => url.trim())
       .filter(url => url.length > 0);
 
+    // Save settings first
     updateSettings({ ...localSettings, channelUrls: urls });
-    onNavigateHome(); // Go back to home after saving
+
+    // Auto-setup if user is logged in and channels configured
+    if (user && urls.length > 0 && localSettings.targetChannels.length > 0) {
+      setIsSettingUp(true);
+      setSetupMessage({ type: 'info', text: '🔄 Setting up video pools and schedule...' });
+
+      try {
+        console.log('🚀 Auto-triggering complete user setup...');
+
+        const result = await completeUserSetup(
+          user.id,
+          urls,
+          localSettings.targetChannels
+        );
+
+        if (result.success) {
+          setSetupMessage({
+            type: 'success',
+            text: '✅ Setup complete! Videos will appear in Schedule Today. Check console for details.'
+          });
+
+          // Clear message after 5 seconds
+          setTimeout(() => setSetupMessage(null), 5000);
+        } else {
+          setSetupMessage({
+            type: 'error',
+            text: `❌ Setup failed: ${result.error || 'Unknown error'}`
+          });
+        }
+      } catch (error: any) {
+        console.error('❌ Auto-setup error:', error);
+        setSetupMessage({
+          type: 'error',
+          text: `❌ Setup error: ${error.message || 'Unknown error'}`
+        });
+      } finally {
+        setIsSettingUp(false);
+      }
+
+      // Don't navigate immediately, let user see the setup message
+      setTimeout(() => {
+        if (setupMessage?.type === 'success') {
+          onNavigateHome();
+        }
+      }, 3000);
+    } else {
+      // No auto-setup needed, navigate immediately
+      onNavigateHome();
+    }
   };
 
   const handleTestTelegram = async () => {
@@ -1316,19 +1372,51 @@ export default function SettingsPage({
 
         </div>
 
-        <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4 flex justify-end gap-3">
-          <button
-            onClick={onNavigateHome}
-            className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Save Settings
-          </button>
+        <div className="sticky bottom-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 p-4">
+          {/* Setup Progress/Message */}
+          {setupMessage && (
+            <div
+              className={`mb-4 p-4 rounded-lg border-2 flex items-start gap-3 ${
+                setupMessage.type === 'success'
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700'
+                  : setupMessage.type === 'error'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
+                  : 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+              }`}
+            >
+              {isSettingUp && <Loader2 className="w-5 h-5 animate-spin flex-shrink-0 mt-0.5" />}
+              <p
+                className={`text-sm font-medium ${
+                  setupMessage.type === 'success'
+                    ? 'text-green-800 dark:text-green-200'
+                    : setupMessage.type === 'error'
+                    ? 'text-red-800 dark:text-red-200'
+                    : 'text-blue-800 dark:text-blue-200'
+                }`}
+              >
+                {setupMessage.text}
+              </p>
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex justify-end gap-3">
+            <button
+              onClick={onNavigateHome}
+              disabled={isSettingUp}
+              className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSettingUp}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {isSettingUp && <Loader2 className="w-4 h-4 animate-spin" />}
+              {isSettingUp ? 'Setting up...' : 'Save Settings'}
+            </button>
+          </div>
         </div>
       </div>
 
