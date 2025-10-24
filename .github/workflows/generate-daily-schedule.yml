@@ -11,11 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Generate today's schedule
+      - name: Generate schedule for all users
         run: |
           curl -X POST \
-            "${{ secrets.SUPABASE_URL }}/functions/v1/generate-daily-schedule" \
-            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/generate-schedule-for-all-users" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" \
             -H "Content-Type: application/json"
 
       - name: Log completion
