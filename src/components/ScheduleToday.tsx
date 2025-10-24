@@ -234,15 +234,19 @@ export default function ScheduleToday({
 
       const result = await response.json();
 
+      console.log('Reset result:', result);
+
       if (result.success) {
         setSuccessMessage(`✅ Reset complete! Deleted ${result.deleted} old videos, generated fresh schedule.`);
         loadSchedule(); // Reload the current view
       } else {
-        throw new Error(result.error || 'Reset failed');
+        const errorMsg = result.error || 'Reset failed';
+        console.error('Reset failed with error:', errorMsg);
+        throw new Error(errorMsg);
       }
     } catch (err: any) {
       console.error('Error resetting schedule:', err);
-      setError(err.message || 'Failed to reset schedule');
+      setError(`Reset failed: ${err.message || 'Unknown error'}`);
     } finally {
       setResetting(false);
     }

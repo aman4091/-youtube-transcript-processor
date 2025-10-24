@@ -49,6 +49,13 @@ serve(async (req) => {
 
     const genResult = await genResponse.json();
 
+    console.log('📋 Generation result:', JSON.stringify(genResult));
+
+    // Check if generation failed
+    if (!genResponse.ok || genResult.success === false) {
+      throw new Error(`Schedule generation failed: ${genResult.error || 'Unknown error'}`);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
